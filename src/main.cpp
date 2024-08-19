@@ -1,73 +1,88 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <minizip/unzip.h>
+#include <memory>
+#include <variant>
 #include <vector>
+
+#include <minizip/unzip.h>
 #include <zlib.h>
 
+#include "../deps/HkXML/src/HkXml.hpp"
 #include "Utility.hpp"
 
 namespace hk
 {
+
 namespace fs = std::filesystem;
 
-enum class ChangeType : uint8_t
-{
-    CREATE_UPDATE = 0,
-    DELETED = 1,
-    UNKNOWN = 10
-};
-
-struct SingleChange
-{
-    std::string name{};
-    ChangeType type{ChangeType::UNKNOWN};
-    uint32_t protoBufSize{0};
-    std::string protoBufData{}; // TODO: should be vec of bytes
-};
-
-struct ChangeSetData
-{
-    uint64_t timeStamp{0};
-    uint32_t numberOfChanges{0};
-    std::vector<SingleChange> changes;
-};
-
-enum class FrameType : uint8_t
-{
-    CHANGE_SET = 0,
-    RESET = 1,
-    META = 2,
-    NODE_DETECTION = 3,
-    UNKNOWN = 10
-};
-
-enum class CompressionType : uint8_t
-{
-    NO_COMPRESSION = 0,
-    GZIP = 1,
-    UNKNOWN = 10
-};
-
-struct Frame
-{
-    FrameType type{FrameType::UNKNOWN};
-    CompressionType compression{CompressionType::UNKNOWN};
-    uint32_t frameSize{0};
-    ChangeSetData changeSetData;
-};
-
-struct Header
-{
-    uint32_t version{0};
-    std::string additionalInfo{};
-};
-
-class Model
+class ChangesData
 {
 
 public:
-    void readIn(std::ifstream& stream)
+    enum class ChangeType : uint8_t
+    {
+        CREATE_UPDATE = 0,
+        DELETED = 1,
+        UNKNOWN = 10
+    };
+
+    struct Field;
+    using FieldVec = std::vector<Field>;
+    using FieldValue = std::variant<std::string, FieldVec>;
+    struct Field
+    {
+        std::string name;
+        FieldValue value;
+    };
+
+    struct SingleChange
+    {
+        std::string name{};
+        ChangeType type{ChangeType::UNKNOWN};
+        uint32_t protoBufSize{0};
+        std::vector<uint8_t> protoBufData{};
+        FieldVec fields{};
+    };
+
+    struct ChangeSetData
+    {
+        uint64_t timeStamp{0};
+        uint32_t numberOfChanges{0};
+        std::vector<SingleChange> changes;
+    };
+
+    enum class FrameType : uint8_t
+    {
+        CHANGE_SET = 0,
+        RESET = 1,
+        META = 2,
+        NODE_DETECTION = 3,
+        UNKNOWN = 10
+    };
+
+    enum class CompressionType : uint8_t
+    {
+        NO_COMPRESSION = 0,
+        GZIP = 1,
+        UNKNOWN = 10
+    };
+
+    struct Frame
+    {
+        FrameType type{FrameType::UNKNOWN};
+        CompressionType compression{CompressionType::UNKNOWN};
+        uint32_t frameSize{0};
+        ChangeSetData changeSetData;
+    };
+
+    struct Header
+    {
+        uint32_t version{0};
+        std::string additionalInfo{};
+    };
+
+    void loadFromPath(std::ifstream& stream)
     {
         // header section
         header.version = utils::read4(stream);
@@ -98,11 +113,19 @@ private:
             frame.compression = static_cast<CompressionType>(utils::read4(stream));
             frame.frameSize = utils::read4(stream);
 
-            println("FrameType: %d | Compressed: %d | FrameSize: %d", (uint8_t)frame.type, (uint8_t)frame.compression,
-                frame.frameSize);
+            // println("FrameType: %d | Compressed: %d | FrameSize: %d", (uint8_t)frame.type,
+            // (uint8_t)frame.compression,
+            //     frame.frameSize);
             if (frame.type == FrameType::META)
             {
                 readMetaType(stream, frame.frameSize);
+                loadInMetaAsXML("metaTmp");
+
+                // for (const XMLDecoder::NodeSPtr& node : res.first)
+                // {
+                //     node->show();
+                // }
+                // return;
             }
             else if (frame.type == FrameType::CHANGE_SET)
             {
@@ -123,6 +146,8 @@ private:
 
     void readMetaType(std::ifstream& stream, const uint64_t size)
     {
+        println("Unzipping meta..");
+
         fs::path metaTmpFolderPath = "metaTmp/";
         fs::path metaZipName = "meta.zip";
         fs::path metaZipPath = metaTmpFolderPath / metaZipName;
@@ -208,7 +233,38 @@ private:
         unzClose(zipFile);
         fs::remove_all(metaZipPath);
 
-        println("Done unzipping META");
+        println("Done unzipping meta");
+    }
+
+    void loadInMetaAsXML(const fs::path metaPath)
+    {
+        println("Loading meta XML in..");
+        std::ifstream beMeta{metaPath / "bm/meta.xml"};
+        std::ifstream elMeta{metaPath / "lte/meta.xml"};
+
+        if (beMeta.fail() || elMeta.fail())
+        {
+            printlne("One of the meta files failed to load for xml parsing");
+            return;
+        }
+
+        beXmlResult = XMLDecoder().decodeFromStream(beMeta);
+        if (!beXmlResult.second.empty())
+        {
+            printlne("Error while parsing XML: %s", beXmlResult.second.c_str());
+            beXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
+            return;
+        }
+
+        // only need BM for now
+        // elXmlResult = XMLDecoder().decodeFromStream(elMeta);
+        // if (!elXmlResult.second.empty())
+        // {
+        //     printlne("Error while parsing XML: %s", elXmlResult.second.c_str());
+        //     elXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
+        //     return;
+        // }
+        println("Loading meta XML done");
     }
 
     ChangeSetData readChangeSetType(std::ifstream& stream, const CompressionType cType, const uint64_t size)
@@ -244,6 +300,7 @@ private:
 
     ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path tempPath)
     {
+        // hope that the compiler does RVO
         ChangeSetData changeSet;
 
         changeSet.timeStamp = utils::read8(stream);
@@ -264,7 +321,14 @@ private:
             else if (change.type == ChangeType::CREATE_UPDATE)
             {
                 change.protoBufSize = utils::read4(stream);
-                change.protoBufData = utils::readStringBytes(stream, change.protoBufSize);
+                std::vector<uint8_t> changeProtoBytes = utils::readBytes(stream, change.protoBufSize);
+                change.fields = populateChangedFieldsFromProtobuf(changeProtoBytes);
+                // printlnHex(change.protoBufData);
+                println("name: %s", change.name.c_str());
+                if (i > 2)
+                {
+                    exit(1);
+                }
             }
             else
             {
@@ -283,6 +347,11 @@ private:
         }
 
         return changeSet;
+    }
+
+    FieldVec populateChangedFieldsFromProtobuf(const std::vector<uint8_t> bytes)
+    {
+        return {};
     }
 
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)
@@ -339,9 +408,73 @@ private:
         return true;
     }
 
+private:
+    XMLDecoder::XmlResult beXmlResult;
+    XMLDecoder::XmlResult elXmlResult;
+
 public:
     Header header;
     std::vector<Frame> frames;
+};
+
+class Model
+{
+public:
+    struct Field;
+    using FieldVec = std::vector<std::shared_ptr<Field>>;
+    using FieldValue = std::variant<std::string, FieldVec>;
+
+    struct Field
+    {
+        std::string name;
+        FieldValue value;
+    };
+
+    struct Object
+    {
+        std::string name;
+        std::vector<Field> fields;
+    };
+
+    void loadFromPath(const fs::path& path)
+    {
+
+        fs::path beMetaPath = path / "bm/meta.xml";
+        std::ifstream beMeta{beMetaPath};
+
+        if (beMeta.fail())
+        {
+            printlne("Failed to open %s", beMetaPath.c_str());
+            return;
+        }
+
+        XMLDecoder::XmlResult beXml = XMLDecoder().decodeFromStream(beMeta);
+        if (!beXml.second.empty())
+        {
+            printlne("Error while reading %s", beMetaPath.c_str());
+            return;
+        }
+
+        // skip xml tag (0 index)
+        XMLDecoder::NodeVec allObjects = beXml.first[1]->getTagsNamed("managedObject");
+        size_t size = allObjects.size();
+
+        for (const auto& object : allObjects)
+        {
+            std::string className = object->getAttribValue("class").value_or("Not found");
+            XMLDecoder::NodeVec pNodes = object->getTagsNamed("p");
+            println("%s %ld", className.c_str(), pNodes.size());
+        }
+        println("Count %ld", size);
+    }
+
+    void applyChanges(const ChangesData& changesData) {}
+
+    // helper funcs
+    void findObject();
+
+public:
+    std::vector<Object> objects;
 };
 
 } // namespace hk
@@ -363,11 +496,17 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    hk::Model model;
-    model.readIn(modelPath);
+    /* Read in all the changes */
+    hk::ChangesData changesData;
+    changesData.loadFromPath(modelPath);
 
-    println("Version %d", model.header.version);
-    println("Additional info is: %s", model.header.additionalInfo.c_str());
+    /* Create a model to which to apply the changes */
+    // hk::Model model;
+    // model.loadFromPath("metaTmp");
+    // model.applyChanges(changesData);
+
+    println("Version %d", changesData.header.version);
+    println("Additional info is: %s", changesData.header.additionalInfo.c_str());
 
     return 0;
 }

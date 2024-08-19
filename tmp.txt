@@ -1,0 +1,50 @@
+[INF] 0a 06 08 00 10 00 18 00 10 dd 20 
+[INF] name: /MRBTS-1/EQM-1/SMOD-4113/CCU-1/CPU-3
+
+[INF] 0a 08 08 00 10 01 18 00 20 01 12 05 08 dd 20 18 00 
+[INF] name: /MRBTS-1/EQM-1/SMOD-4113/CCU-1/CPU-3/SYNC-1
+
+[INF] 0a 08 08 01 10 01 18 00 20 01 12 0f 12 0d 41 73 69 61 2f 53 68 61 6e 67 68 61 69 18 01 50 02 68 12 79 00 00 00 00 00 00 00 00 90 01 01 a0 01 00 c0 01 00 
+[INF] name: /MRBTS-1/EQM-1/SMOD-4113/TIME-1
+
+[INF] 0a 06 08 00 10 00 18 00 10 91 20 
+[INF] name: /MRBTS-1/EQM-1/SMOD-4113/CCU-1/CPU-1
+
+
+struct Field
+{
+    pair string, Field[]; // name - array of Fields
+    FieldType ft; // simple or repeated
+}
+
+struct Object
+{
+    string path;
+    vector Field fields;
+}
+
+-- Object
+  -- fName (list)
+    -- [0] 
+      -- fName (list)
+        -- [0]
+          -- fName : val
+          -- fName : val
+
+// needs meta to be available
+1: {
+  1: some_val
+  2: {
+    4: other_val
+  }
+}
+
+we are on /SMTH-1/CEVA-1/ALARM_RECORD-1
+=> get end class name: ALARM_RECORD
+=> find it in BM meta xml node and store it
+=> pb decodes field number "2"
+=> look through ALARM_RECORD xml nodes and find "p" node which has child "proto" with
+   attrib named "index" who's value is "2"
+=> the name of the changed field will be p.name attrib. Other "p" and child "proto" attribs
+   will tell more about the changed field (is enum/repeated/type etc)
+=> from this, construct a Field object

@@ -5,17 +5,11 @@
 namespace utils
 {
 
-/**
-    @brief Look ahead 1 byte from _stream_ and return int8_t
-*/
 uint8_t peek1(std::ifstream& stream)
 {
     return stream.peek();
 }
 
-/**
-    @brief Read 1 byte from _stream_ and return uint8_t
-*/
 uint8_t read1(std::ifstream& stream)
 {
     uint8_t tmp[1];
@@ -24,9 +18,6 @@ uint8_t read1(std::ifstream& stream)
     return tmp[0];
 }
 
-/**
-    @brief Read 2 big endian bytes from _stream_ and return uint16_t
-*/
 uint16_t read2(std::ifstream& stream)
 {
     uint8_t tmp[2];
@@ -35,9 +26,6 @@ uint16_t read2(std::ifstream& stream)
     return (uint16_t)tmp[1] | (uint16_t)tmp[0] << 8;
 }
 
-/**
-    @brief Read 4 big endian bytes from _stream_ and return uint32_t
-*/
 uint32_t read4(std::ifstream& stream)
 {
     uint8_t tmp[4];
@@ -46,9 +34,6 @@ uint32_t read4(std::ifstream& stream)
     return tmp[3] | tmp[2] << 8 | tmp[1] << 16 | tmp[0] << 24;
 }
 
-/**
-    @brief Read 8 big endian bytes from _stream_ and return int64_t
-*/
 uint64_t read8(std::ifstream& stream)
 {
     // promote to 64 directly as we will hold in it final result
@@ -58,9 +43,14 @@ uint64_t read8(std::ifstream& stream)
     return high << 32 | low;
 }
 
-/**
-    @brief Read N bytes, supposedly ASCII, and return the string it forms
-*/
+std::vector<uint8_t> readBytes(std::ifstream& stream, uint32_t n)
+{
+    std::vector<uint8_t> result(n, '\0');
+
+    stream.read((char*)result.data(), n);
+    return result;
+}
+
 std::string readStringBytes(std::ifstream& stream, uint32_t n)
 {
     std::string result(n, '\0');
@@ -68,10 +58,6 @@ std::string readStringBytes(std::ifstream& stream, uint32_t n)
     stream.read(result.data(), n);
     return result;
 }
-
-/**
-    @brief Determine if the next 12 bytes form the magic number
-*/
 
 bool isMagicNumberNext(std::ifstream& stream)
 {

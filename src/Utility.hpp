@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdio>
 #include <fstream>
+#include <vector>
 
 // Surely std::format could be used but if utility is included across multiple translation units
 // there will be a performance penalty. Printf does an excellent job for now anyway.
@@ -33,6 +35,17 @@ namespace utils
         int32_t size = snprintf(nullptr, 0, fmt, ##__VA_ARGS__);                                                       \
         buff = std::string(size, '\0');                                                                                \
         sprintf(buff.data(), fmt, ##__VA_ARGS__);                                                                      \
+    } while (0);
+
+#define printlnHex(buff)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        printf(INFO_COLOR "[INF] ");                                                                                   \
+        for (const auto& ch : buff)                                                                                    \
+        {                                                                                                              \
+            printf("%02x ", ch);                                                                                       \
+        }                                                                                                              \
+        printf(RESET_COLOR NEW_LINE);                                                                                  \
     } while (0);
 
 #else // MUTE_PRINT
@@ -79,7 +92,12 @@ uint32_t read4(std::ifstream& stream);
 uint64_t read8(std::ifstream& stream);
 
 /**
-    @brief Read N bytes, supposedly ASCII, and return the string it forms
+    @brief Read N bytes and return the vector it forms
+*/
+std::vector<uint8_t> readBytes(std::ifstream& stream, uint32_t n);
+
+/**
+    @brief Read N bytes, supposedly ASCII and return the string it forms
 */
 std::string readStringBytes(std::ifstream& stream, uint32_t n);
 

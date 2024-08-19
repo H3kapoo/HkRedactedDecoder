@@ -43,7 +43,7 @@ BreakBeforeBinaryOperators: false
 AlignOperands: Align
 PenaltyBreakAssignment: 120
 PenaltyBreakOpenParenthesis: 120
-PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyBreakBeforeFirstCallParameter: 0
 AllowShortBlocksOnASingleLine: true
 # AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 BinPackParameters: false
