@@ -38,7 +38,7 @@ public:
 
     struct SingleChange
     {
-        std::string name{};
+        std::string name{}; // maybe path?
         ChangeType type{ChangeType::UNKNOWN};
         uint32_t protoBufSize{0};
         std::vector<uint8_t> protoBufData{};
@@ -322,11 +322,11 @@ private:
             {
                 change.protoBufSize = utils::read4(stream);
                 std::vector<uint8_t> changeProtoBytes = utils::readBytes(stream, change.protoBufSize);
-                change.fields = populateChangedFieldsFromProtobuf(changeProtoBytes);
-                // printlnHex(change.protoBufData);
-                println("name: %s", change.name.c_str());
-                if (i > 2)
+                // change.fields = populateChangedFieldsFromProtobuf(changeProtoBytes);
+                if (change.name.contains("TX_PU_BP_L"))
                 {
+                    println("name: %s", change.name.c_str());
+                    printlnHex(changeProtoBytes);
                     exit(1);
                 }
             }
