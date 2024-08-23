@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -29,52 +30,42 @@ public:
         uint64_t fieldNumber{0};
     };
 
-    ProtobufDecoder()
+    void referenceXMLs(const XMLDecoder::XmlResult& firstXML, const XMLDecoder::XmlResult& secondXML)
     {
-        println("Loading meta XML in..");
-        std::ifstream beMeta{"metaTmp/bm/meta.xml"};
-        std::ifstream elMeta{"metaTmp/lte/meta.xml"};
-
-        if (beMeta.fail() || elMeta.fail())
-        {
-            printlne("One of the meta files failed to load for xml parsing");
-            return;
-        }
-
-        beXmlResult = XMLDecoder().decodeFromStream(beMeta);
-        if (!beXmlResult.second.empty())
-        {
-            printlne("Error while parsing XML: %s", beXmlResult.second.c_str());
-            beXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
-            return;
-        }
-
-        // only need BM for now
-        elXmlResult = XMLDecoder().decodeFromStream(elMeta);
-        if (!elXmlResult.second.empty())
-        {
-            printlne("Error while parsing XML: %s", elXmlResult.second.c_str());
-            elXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
-            return;
-        }
-        println("Loading meta XML done");
+        beXmlResult = firstXML;
+        elXmlResult = secondXML;
     }
 
-    void parseProtobufFromBuffer(const std::string& objectName, const std::vector<uint8_t>& buffer)
+    FieldVec parseProtobufFromBuffer(const std::string& objectName, const std::vector<uint8_t>& buffer)
     {
         uint64_t currentIndex{0};
         uint64_t bufferSize = buffer.size();
 
-        XMLDecoder::NodeSPtr objectNode = elXmlResult.first[1]->getTagNamedWithAttrib("managedObject",
-            {"class", objectName});
-        if (!objectNode)
+        XMLDecoder::NodeSPtr objectNode{nullptr};
+        /* Check the cache first */
+        if (objectsMap.contains(objectName))
         {
-            printlne("Couldn't find object named %s", objectName.c_str());
-            return;
+            objectNode = objectsMap[objectName];
+        }
+        /* Else do the hard work of finding it */
+        else
+        {
+            objectNode = beXmlResult.first[1]->getTagNamedWithAttrib("managedObject", {"class", objectName});
+            if (!objectNode)
+            {
+                objectNode = elXmlResult.first[1]->getTagNamedWithAttrib("managedObject", {"class", objectName});
+                if (!objectNode)
+                {
+                    printlne("Couldn't find object named %s nowhere", objectName.c_str());
+                    return {};
+                }
+            }
+            objectsMap[objectName] = objectNode;
         }
 
         FieldVec fv;
 
+        // printlne("Object name %s %ld", objectName.c_str(), bufferSize);
         while (currentIndex < bufferSize)
         {
             // objectNode - managed object 'objectName' in this case
@@ -82,6 +73,7 @@ public:
             fv.emplace_back(f);
         }
         // printFields(fv);
+        return fv;
     }
 
     void printFields(const FieldVec& fv, uint64_t depth = 0)
@@ -95,23 +87,6 @@ public:
 
         for (const auto& field : fv)
         {
-            // if (std::holds_alternative<uint64_t>(field.value))
-            // {
-            //     println("%s%s: %lu", sp.c_str(), field.name.c_str(), std::get<uint64_t>(field.value));
-            // }
-            // else if (std::holds_alternative<double>(field.value))
-            // {
-            //     println("%s%s: %lf", sp.c_str(), field.name.c_str(), std::get<double>(field.value));
-            // }
-            // else if (std::holds_alternative<std::string>(field.value))
-            // {
-            //     println("%s%s: %s", sp.c_str(), field.name.c_str(), std::get<std::string>(field.value).c_str());
-            // }
-            // else
-            // {
-            //     println("%s%s []:", sp.c_str(), field.name.c_str());
-            //     printFields(std::get<FieldVec>(field.value), depth + 1);
-            // }
             if (std::holds_alternative<uint64_t>(field.value))
             {
                 println("%sFieldName: %s FieldValue: %lu", sp.c_str(), field.name.c_str(),
@@ -201,6 +176,13 @@ private:
         return "UNKNOWN";
     }
 
+    enum class DecodeHint
+    {
+        NONE,
+        PACKED_OR_STRING,
+        STRING_LIST
+    };
+
     Field decode(const XMLDecoder::NodeSPtr& objectNode, const std::vector<uint8_t>& buffer, uint64_t& currentIndex)
     {
         /* Decoded field to be returned. Since it's a variant, it can have int/double/string/[] forms */
@@ -211,7 +193,7 @@ private:
         // println("TAG FIELD NR IS: %ld %s %s", tagResult.fieldNumber, objectNode->nodeName.c_str(),
         //     objectNode->getAttribValue("name").value_or("idk").c_str());
 
-        // find "p" for which child "proto"'s "index" value is tagResult.fieldNumber
+        /* Find "p" for which child "proto"'s "index" value is tagResult.fieldNumber */
         XMLDecoder::NodeSPtr pNode{nullptr};
         int64_t pNodeIndex{0};
         for (const auto& objectNodeChild : objectNode->children)
@@ -237,17 +219,20 @@ private:
 
         if (!pNode) // pNode or actionNode :)
         {
-            printlne("WHERE P FIELD WE NEED");
+            // it will enter here for CLOCK, don't care for now
+            // printlne("WHERE P FIELD WE NEED %ld", tagResult.fieldNumber);
+            // exit(1);
             return field;
         }
 
         /* If it's a simple value, easily decode it. (non LEN proto type)*/
         const std::string pNodeType = pNode->getAttribValue("type").value_or("UNKNOWN");
-        if (pNodeType == "integer" || pNodeType == "double" || pNodeType == "boolean")
+        const std::string pNodeRecurrence = pNode->getAttribValue("recurrence").value_or("UNKNOWN");
+        if (pNodeRecurrence != "repeated" &&
+            (pNodeType == "integer" || pNodeType == "double" || pNodeType == "boolean"))
         {
-            /* In this case we can decode stuff directly. We will not need an object to "dig" deeper into. So nullptr
-             * can be passed. */
-            FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, currentIndex);
+            // printlne("entered here");
+            FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, false, currentIndex);
 
             if (pNodeType == "double")
             {
@@ -264,46 +249,61 @@ private:
         /* Otherwise it will be encoded as a LEN somehow (enums/strings/lists)*/
         else
         {
-            // enums/structs are encoded as LEN
-            if (pNodeIndex - 1 < 0)
+            // printlne("entered wew %s %s %s", field.name.c_str(), pNodeType.c_str(), pNodeRecurrence.c_str());
+            if (pNodeType == "string")
             {
-                printlne("One above index is less than zero!");
-                return field;
+                FieldValue decodedPayload = decodePayload(objectNode, tagResult, buffer, true, currentIndex);
+                field.value = decodedPayload;
             }
+            else
+            {
+                const auto protoNodePacked =
+                    pNode->children[pNode->children.size() - 1]->getAttribValue("packed").value_or("?") == "true";
+                // needs to be treated like a string, they are packed, not tag/val pair anymore
+                if (protoNodePacked && pNodeRecurrence == "repeated")
+                {
+                    // printlne("just decode as rep int");
+                    FieldValue decodedPayload = decodePayload(objectNode, tagResult, buffer, true, currentIndex);
+                    field.value = decodedPayload;
+                }
+                else
+                {
+                    // enums/structs are encoded as LEN
+                    if (pNodeIndex - 1 < 0)
+                    {
+                        // some will end here (such as GNSS) because meta layout is inconsistent and the enum values are
+                        // not directly above "p" like they should be. It can be specially handled, but not sure if
+                        // worth it
+                        // printlne("One above index is less than zero!");
+                        // exit(1);
+                        return field;
+                    }
+                    XMLDecoder::NodeSPtr nodeAbovePNode = objectNode->children[pNodeIndex - 1];
+                    FieldValue decodedPayload = decodePayload(nodeAbovePNode, tagResult, buffer, false, currentIndex);
+                    field.value = decodedPayload;
 
-            XMLDecoder::NodeSPtr nodeAbovePNode = objectNode->children[pNodeIndex - 1];
-            FieldValue decodedPayload = decodePayload(nodeAbovePNode, tagResult, buffer, currentIndex);
-            field.value = decodedPayload;
+                    // check if it was ENUM to decode
+                    if (pNode->children[0]->getAttribValue("type") == "enum")
+                    {
+                        uint64_t enumVal = std::get<0>(field.value);
+                        // printlne("value %ld node %s", enumVal, nodeAbovePNode->getAttribValue("name")->c_str());
+                        const auto node = nodeAbovePNode->getTagNamedWithAttrib("enum",
+                            {"value", std::to_string(enumVal)});
+
+                        // if this is the case, means one avobe isn't directly an enumeration. We shall find the
+                        // referenced enum, but it's slow and not many meta objects do this, so idk
+                        if (!node)
+                        {
+                            return field;
+                        }
+                        field.value = node->getAttribValue("name").value_or("VALUE_NOT_FOUND");
+                    }
+                }
+            }
         }
 
         return field;
     }
-
-    //     field.name = std::to_string(tagResult.fieldNumber) +
-    //                  protoNodeParent->getAttribValue("name").value_or("UNKNOWN");
-    //     printlne("protoNodeParent name %s", field.name.c_str());
-
-    //     FieldValue decodedPayload = decodePayload(newObjectNode, tagResult, buffer, currentIndex);
-
-    //     /* Did we decode a proto of an enum field? */
-    //     if (protoNodeParent->children[0]->getAttribValue("type") == "enum")
-    //     {
-    //         uint32_t oneAboveObjectNode = pIndices[protoParentIndex] - 1;
-    //         // field.value = decodedPayload;
-    //         uint64_t enumVal = std::get<0>(decodedPayload);
-    //         field.value = objectNode->children[oneAboveObjectNode]
-    //                           ->getTagNamedWithAttrib("enum", {"value", std::to_string(enumVal)})
-    //                           ->getAttribValue("name")
-    //                           .value_or("VALUE_NOT_FOUND");
-    //     }
-    //     /* Plain value such as string/number */
-    //     else
-    //     {
-    //         field.value = decodedPayload;
-    //     }
-
-    //     return field;
-    // }
 
     TagDecodeResult decodeTag(const std::vector<uint8_t>& buffer, uint64_t& currentIndex)
     {
@@ -350,6 +350,7 @@ private:
     FieldValue decodePayload(const XMLDecoder::NodeSPtr& objectNode,
         const TagDecodeResult& decodedTag,
         const std::vector<uint8_t>& buffer,
+        const bool stringOrPacked,
         uint64_t& currentIndex)
     {
         switch (decodedTag.type)
@@ -369,11 +370,8 @@ private:
                 /* Decoded length of the LEN payload in bytes*/
                 uint64_t payloadLen = decodeVarInt(buffer, currentIndex);
 
-                bool isSimpleStringAhead = std::isalnum(buffer[currentIndex]);
-                if (isSimpleStringAhead)
+                if (stringOrPacked)
                 {
-                    // for (int i = 0; i < payloadLen; i++)
-                    printlne("CREDEM CA E STRING: %c", buffer[currentIndex]);
                     return decodeStringPayload(payloadLen, buffer, currentIndex);
                 }
                 else
@@ -386,6 +384,7 @@ private:
                         Field field = decode(objectNode, buffer, currentIndex);
                         fv.emplace_back(field);
                     }
+
                     return fv;
                 }
             }
@@ -428,63 +427,6 @@ private:
 private:
     XMLDecoder::XmlResult beXmlResult;
     XMLDecoder::XmlResult elXmlResult;
+    std::unordered_map<std::string, XMLDecoder::NodeSPtr> objectsMap;
 };
 } // namespace hk
-
-int main()
-{
-    // Unfortunatelly lists cannot be trivially decoded without knowing the schema
-    // Later edit: we now have means to parse the XML META and figure out if the LEN is bytes/string/repeated
-
-    // std::vector<uint8_t> buffer = {10, 6, 8, 0, 16, 0, 24, 0, 16, 221, 32};
-    // std::vector<uint8_t> buffer = {10, 8, 8, 0, 16, 1, 24, 0, 32, 1, 18, 5, 8, 221, 32, 24, 0};
-    // std::vector<uint8_t> buffer = {10, 8, 8, 1, 16, 1, 24, 0, 32, 1, 18, 15, 18, 13, 65, 115, 105, 97, 47, 83, 104,
-    // 97,
-    //     110, 103, 104, 97, 105, 24, 1, 80, 2, 104, 18, 121, 0, 0, 0, 0, 0, 0, 0, 0, 144, 1, 1, 160, 1, 0, 192, 1, 0};
-    // std::vector<uint8_t> buffer = {0, 74, 47, 77, 82, 66, 84, 83, 45, 49, 47, 82, 65, 84, 45, 49, 47, 69, 81, 77, 95,
-    //     76, 45, 49, 47, 82, 85, 95, 76, 45, 49, 47, 86, 85, 66, 85, 83, 95, 76, 45, 56, 47, 86, 85, 95, 76, 45, 49,
-    //     47, 72, 87, 80, 79, 82, 84, 95, 76, 45, 49, 0, 0, 0, 0, 28, 10, 8, 8, 1, 16, 1, 24, 0, 32, 2, 16, 0, 24, 0,
-    //     32, 7, 40, 181, 201, 1, 48, 1, 56, 1, 64, 1, 80, 1, 0, 66, 47, 77, 82, 66, 84, 83, 45, 49, 47, 82, 65, 84,
-    //     45, 49, 47, 69, 81, 77, 95, 76, 45, 49, 47, 82, 77, 79, 68, 95, 76, 45, 50, 47, 67, 79, 78, 78, 69, 67, 84,
-    //     79, 82, 95, 76, 45, 50, 48, 55, 47, 72, 87, 80, 79, 82, 84, 95, 76, 45, 49, 0, 0, 0, 0, 28, 10, 8, 8, 1, 16,
-    //     1, 24, 0, 32, 2, 16, 0, 24, 0, 32, 7, 40, 181, 201, 1, 48, 1, 56, 1, 64, 1, 80, 1, 0, 78, 47, 77, 82, 66, 84,
-    //     83, 45, 49, 47, 82, 65, 84, 45, 49, 47, 66, 84, 83, 95, 76, 45, 49, 47, 69, 81, 77, 95, 76, 45, 49, 47, 82,
-    //     77, 79, 68, 95, 76, 45, 49, 47, 82, 85, 95, 76, 45, 49, 47, 72, 68, 76, 67, 66, 85, 83, 95, 76, 45, 49, 47,
-    //     65, 76, 68, 85, 95, 76, 45, 49, 47, 72, 87, 80, 79, 82, 84, 95, 76, 45, 49, 0, 0, 0, 0, 28, 10, 8, 8, 1, 16,
-    //     1, 24, 0, 32, 2, 16, 0, 24, 0, 32, 7, 40, 181, 201, 1, 48, 1, 56, 1, 64, 1, 80, 1, 0, 56, 47, 77, 82, 66, 84,
-    //     83, 45, 49, 47, 82, 65, 84, 45, 49, 47, 66, 84, 83, 95, 76, 45, 49, 47, 69, 81, 77, 95, 76, 45, 49, 47, 82,
-    //     77, 79, 68, 95, 76, 45, 49, 47, 82, 85, 95, 76, 45, 49, 47, 86, 85, 66, 85, 83, 95, 76, 45, 49, 0, 0, 0, 0,
-    //     10, 10, 8, 8, 0, 16, 0, 24, 0, 32, 2, 0, 72, 47, 77, 82, 66, 84, 83, 45, 49, 47, 82, 65, 84, 45, 49, 47, 66,
-    //     84, 83, 95, 76};
-    // std::vector<uint8_t> buffer = {10, 10, 8, 1, 16, 1, 24, 0, 32, 1, 40, 0, 18, 6, 8, 0, 16, 1, 24, 1, 18, 6, 8, 6,
-    // 16,
-    //     1, 24, 1, 18, 6, 8, 7, 16, 1, 24, 1, 26, 4, 8, 0, 16, 2, 26, 4, 8, 6, 16, 0, 26, 4, 8, 7, 16, 0, 32, 0, 80,
-    //     0, 130, 1, 43, 47, 77, 82, 66, 84, 83, 45, 49, 47, 69, 81, 77, 45, 49, 47, 83, 77, 79, 68, 45, 52, 49, 49,
-    //     51, 47, 67, 67, 85, 45, 49, 47, 79, 83, 67, 73, 76, 76, 65, 84, 79, 82, 45, 49, 168, 1, 0};
-    std::vector<uint8_t> buffer = {8, 0, 16, 0, 25, 0, 0, 0, 0, 0, 0, 0, 0, 33, 0, 0, 0, 0, 0, 0, 0, 0, 42, 4, 84, 120,
-        71, 56, 48, 2, 65, 0, 0, 0, 0, 216, 248, 21, 65, 73, 0, 0, 0, 0, 128, 192, 20, 65, 82, 33, 49, 48, 44, 49, 53,
-        44, 50, 48, 44, 51, 48, 44, 52, 48, 44, 53, 48, 44, 54, 48, 44, 55, 48, 44, 56, 48, 44, 57, 48, 44, 49, 48, 48,
-        89, 0, 0, 0, 0, 0, 0, 89, 64, 89, 0, 0, 0, 0, 0, 0, 105, 64, 89, 0, 0, 0, 0, 0, 192, 114, 64, 89, 0, 0, 0, 0, 0,
-        0, 121, 64, 89, 0, 0, 0, 0, 0, 64, 127, 64, 89, 0, 0, 0, 0, 0, 192, 130, 64, 89, 0, 0, 0, 0, 0, 224, 133, 64,
-        89, 0, 0, 0, 0, 0, 0, 137, 64, 89, 0, 0, 0, 0, 0, 32, 140, 64, 89, 0, 0, 0, 0, 0, 64, 143, 64, 114, 96, 8, 5,
-        18, 92, 8, 78, 17, 0, 0, 0, 0, 0, 0, 89, 64, 17, 0, 0, 0, 0, 0, 0, 105, 64, 17, 0, 0, 0, 0, 0, 192, 114, 64, 17,
-        0, 0, 0, 0, 0, 0, 121, 64, 17, 0, 0, 0, 0, 0, 64, 127, 64, 17, 0, 0, 0, 0, 0, 192, 130, 64, 17, 0, 0, 0, 0, 0,
-        224, 133, 64, 17, 0, 0, 0, 0, 0, 0, 137, 64, 17, 0, 0, 0, 0, 0, 32, 140, 64, 17, 0, 0, 0, 0, 0, 64, 143, 64,
-        114, 33, 8, 0, 18, 29, 8, 42, 17, 0, 0, 0, 0, 0, 0, 89, 64, 17, 0, 0, 0, 0, 0, 192, 98, 64, 17, 0, 0, 0, 0, 0,
-        0, 105, 64, 122, 41, 8, 144, 78, 8, 160, 156, 1, 8, 176, 234, 1, 8, 192, 184, 2, 8, 208, 134, 3, 8, 224, 212, 3,
-        8, 240, 162, 4, 8, 128, 241, 4, 8, 144, 191, 5, 8, 160, 141, 6, 16, 5, 122, 12, 8, 144, 78, 8, 152, 117, 8, 160,
-        156, 1, 16, 0, 128, 1, 4, 144, 1, 3, 152, 1, 0, 169, 1, 0, 0, 0, 0, 0, 136, 227, 64, 185, 1, 0, 0, 0, 0, 0, 249,
-        21, 65, 185, 1, 0, 0, 0, 0, 128, 19, 28, 65, 201, 1, 0, 0, 0, 0, 0, 0, 240, 63, 209, 1, 0, 0, 0, 0, 0, 136, 211,
-        64, 217, 1, 0, 0, 0, 0, 0, 136, 211, 64, 226, 1, 15, 8, 4, 18, 11, 8, 78, 17, 0, 0, 0, 0, 0, 64, 159, 64, 226,
-        1, 15, 8, 0, 18, 11, 8, 42, 17, 0, 0, 0, 0, 0, 64, 159, 64, 234, 1, 24, 8, 3, 18, 20, 8, 78, 17, 0, 0, 0, 0, 0,
-        154, 224, 64, 25, 0, 0, 0, 0, 224, 147, 225, 64, 234, 1, 24, 8, 0, 18, 20, 8, 42, 17, 0, 0, 0, 0, 0, 154, 224,
-        64, 25, 0, 0, 0, 0, 224, 147, 225, 64, 128, 2, 1, 176, 2, 0, 185, 2, 0, 0, 0, 0, 0, 0, 0, 0, 192, 2, 0, 217, 2,
-        0, 0, 0, 0, 0, 0, 0, 0};
-    hk::ProtobufDecoder pbDecoder;
-    // pbDecoder.parseProtobufFromBuffer("TIME", buffer);
-    pbDecoder.parseProtobufFromBuffer("TX_PU_BP_L", buffer);
-
-    // printlne("EOF %d", protoBin.peek() == EOF);
-
-    return 0;
-}

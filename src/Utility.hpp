@@ -107,3 +107,16 @@ std::string readStringBytes(std::ifstream& stream, uint32_t n);
 bool isMagicNumberNext(std::ifstream& stream);
 
 } // namespace utils
+
+namespace hk
+{
+struct Field;
+using FieldVec = std::vector<Field>;
+using FieldValue = std::variant<uint64_t, std::string, double, FieldVec>;
+
+struct Field
+{
+    std::string name;
+    FieldValue value;
+};
+} // namespace hk

@@ -53,3 +53,9 @@ we are on /SMTH-1/CEVA-1/ALARM_RECORD-1
 => the name of the changed field will be p.name attrib. Other "p" and child "proto" attribs
    will tell more about the changed field (is enum/repeated/type etc)
 => from this, construct a Field object
+
+
+if repeated
+  if integer || boolean || double
+    =>  decodePayload(objectNode,
+else

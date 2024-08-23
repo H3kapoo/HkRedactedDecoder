@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/protoDeco",
-            "args": [],
+            "args": ["data/run.ims2"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

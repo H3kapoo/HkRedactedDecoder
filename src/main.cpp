@@ -9,6 +9,7 @@
 #include <zlib.h>
 
 #include "../deps/HkXML/src/HkXml.hpp"
+#include "ProtoDecoder.hpp"
 #include "Utility.hpp"
 
 namespace hk
@@ -27,14 +28,14 @@ public:
         UNKNOWN = 10
     };
 
-    struct Field;
-    using FieldVec = std::vector<Field>;
-    using FieldValue = std::variant<std::string, FieldVec>;
-    struct Field
-    {
-        std::string name;
-        FieldValue value;
-    };
+    // struct Field;
+    // using FieldVec = std::vector<Field>;
+    // using FieldValue = std::variant<std::string, FieldVec>;
+    // struct Field
+    // {
+    //     std::string name;
+    //     FieldValue value;
+    // };
 
     struct SingleChange
     {
@@ -256,14 +257,15 @@ private:
             return;
         }
 
-        // only need BM for now
-        // elXmlResult = XMLDecoder().decodeFromStream(elMeta);
-        // if (!elXmlResult.second.empty())
-        // {
-        //     printlne("Error while parsing XML: %s", elXmlResult.second.c_str());
-        //     elXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
-        //     return;
-        // }
+        elXmlResult = XMLDecoder().decodeFromStream(elMeta);
+        if (!elXmlResult.second.empty())
+        {
+            printlne("Error while parsing XML: %s", elXmlResult.second.c_str());
+            elXmlResult = XMLDecoder::XmlResult{}; // reset it to nothing
+            return;
+        }
+
+        protoDecoder.referenceXMLs(beXmlResult, elXmlResult);
         println("Loading meta XML done");
     }
 
@@ -322,12 +324,21 @@ private:
             {
                 change.protoBufSize = utils::read4(stream);
                 std::vector<uint8_t> changeProtoBytes = utils::readBytes(stream, change.protoBufSize);
-                // change.fields = populateChangedFieldsFromProtobuf(changeProtoBytes);
-                if (change.name.contains("TX_PU_BP_L"))
+                if (change.name.contains("GNSS"))
                 {
+                    continue;
+                }
+                change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
+                if (change.name.ends_with("NRCELL_L-1"))
+                {
+                    //     // if (i > 27)
+                    //     // {
+                    //     //     exit(1);
+                    //     // }
                     println("name: %s", change.name.c_str());
-                    printlnHex(changeProtoBytes);
-                    exit(1);
+                    //     printlnHex(changeProtoBytes);
+                    protoDecoder.printFields(change.fields);
+                    // exit(1);
                 }
             }
             else
@@ -349,9 +360,13 @@ private:
         return changeSet;
     }
 
-    FieldVec populateChangedFieldsFromProtobuf(const std::vector<uint8_t> bytes)
+    FieldVec populateChangedFieldsFromProtobuf(const std::string& changePath, const std::vector<uint8_t> bytes)
     {
-        return {};
+        const auto itStart = changePath.find_last_of('/') + 1;
+        const auto itEnd = changePath.find_last_of('-');
+        std::string name = changePath.substr(itStart, itEnd - itStart);
+        return protoDecoder.parseProtobufFromBuffer(name, bytes);
+        // return {};
     }
 
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)
@@ -411,6 +426,7 @@ private:
 private:
     XMLDecoder::XmlResult beXmlResult;
     XMLDecoder::XmlResult elXmlResult;
+    ProtobufDecoder protoDecoder;
 
 public:
     Header header;
