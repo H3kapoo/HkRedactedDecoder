@@ -176,13 +176,6 @@ private:
         return "UNKNOWN";
     }
 
-    enum class DecodeHint
-    {
-        NONE,
-        PACKED_OR_STRING,
-        STRING_LIST
-    };
-
     Field decode(const XMLDecoder::NodeSPtr& objectNode, const std::vector<uint8_t>& buffer, uint64_t& currentIndex)
     {
         /* Decoded field to be returned. Since it's a variant, it can have int/double/string/[] forms */

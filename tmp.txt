@@ -59,3 +59,9 @@ if repeated
   if integer || boolean || double
     =>  decodePayload(objectNode,
 else
+
+-- string
+-- int
+-- double
+-- struct
+-- list (or any of the above)
