@@ -1,10 +1,6 @@
-#include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <string>
-#include <unordered_map>
 #include <variant>
-#include <vector>
 
 #include "../deps/HkXML/src/HkXml.hpp"
 #include "CommonTypes.hpp"
@@ -189,8 +185,7 @@ private:
         if (!pOrActionNode)
         {
             // it will enter here for CLOCK, don't care for now
-            // printlne("WHERE P FIELD WE NEED %ld", tagResult.fieldNumber);
-            exit(1);
+            printlne("pOrActionNode not found for fieldNumber %ld", tagResult.fieldNumber);
             return decodeResult;
         }
 
@@ -205,10 +200,6 @@ private:
         if (isFieldRepeated)
         {
             decodeResult.isRepeated = true;
-        }
-        else
-        {
-            decodeResult.isRepeated = false;
         }
 
         if (isSimpleType)
