@@ -507,12 +507,13 @@ int main(int argc, char** argv)
     hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
 
     printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
-    // printlne("name: %d", (uint8_t)changesData.frames[0].type);
-    for (const auto& [k, v] : fm)
-    {
-        printlne("K: %s", k.c_str());
-    }
 
+    hk::FieldMap stateInfo = GetMap(fm["stateInfo"].value);
+    std::string adminState = GetStr(stateInfo["operationalState"].value);
+
+    printlne("K: %s", adminState.c_str());
+
+    hk::ProtobufDecoder::printFields(fm);
     /* Create a model to which to apply the changes */
     // hk::Model model;
     // model.loadFromPath("metaTmp");

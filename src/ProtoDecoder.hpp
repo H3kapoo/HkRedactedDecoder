@@ -111,7 +111,7 @@ public:
         return fm;
     }
 
-    void printFields(const FieldMap& fm, uint64_t depth = 0)
+    static void printFields(const FieldMap& fm, uint64_t depth = 0)
     {
         std::string sp;
         sp.reserve(depth * 4 + 4);
@@ -557,15 +557,7 @@ private:
                 uint64_t payloadLen = decodeVarInt(buffer, currentIndex);
                 if (hint == DecodeHint::STRING_OR_PACKED)
                 {
-                    if (objectNode)
-                    {
-                        printlne("ob node");
-                        return decodeStringPayload(payloadLen, buffer, currentIndex);
-                    }
-                    else
-                    {
-                        return decodeStringPayload(payloadLen, buffer, currentIndex);
-                    }
+                    return decodeStringPayload(payloadLen, buffer, currentIndex);
                 }
                 else
                 {
