@@ -1,0 +1,3 @@
+[submodule "/home/hekapoo/Documents/probe/decode_proto/deps/HkXML"]
+	path = /home/hekapoo/Documents/probe/decode_proto/deps/HkXML
+	url = https://github.com/H3kapoo/HkXML.git
