@@ -28,22 +28,12 @@ public:
         UNKNOWN = 10
     };
 
-    // struct Field;
-    // using FieldVec = std::vector<Field>;
-    // using FieldValue = std::variant<std::string, FieldVec>;
-    // struct Field
-    // {
-    //     std::string name;
-    //     FieldValue value;
-    // };
-
     struct SingleChange
     {
         std::string name{}; // maybe path?
         ChangeType type{ChangeType::UNKNOWN};
         uint32_t protoBufSize{0};
-        std::vector<uint8_t> protoBufData{};
-        FieldVec fields{};
+        FieldMap fields{};
     };
 
     struct ChangeSetData
@@ -140,6 +130,7 @@ private:
             }
 
             frameCount++;
+            frames.emplace_back(frame);
         }
 
         // println("Frame count: %ld", frameCount);
@@ -324,30 +315,28 @@ private:
             {
                 change.protoBufSize = utils::read4(stream);
                 std::vector<uint8_t> changeProtoBytes = utils::readBytes(stream, change.protoBufSize);
-                if (change.name.contains("GNSS"))
+                if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
                 {
                     continue;
                 }
                 change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
-                if (change.name.ends_with("NRCELL_L-1"))
-                {
-                    //     // if (i > 27)
-                    //     // {
-                    //     //     exit(1);
-                    //     // }
-                    println("name: %s", change.name.c_str());
-                    //     printlnHex(changeProtoBytes);
-                    protoDecoder.printFields(change.fields);
-                    // exit(1);
-                }
+
+                // if (change.name.contains("CONFIGURE_DEVICE_REQ"))
+                // if (change.name.contains("TX_PU_BP_L"))
+                // {
+                //     change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
+                //     println("name: %s", change.name.c_str());
+                //     // printlnHex(changeProtoBytes);
+                //     protoDecoder.printFields(change.fields);
+                //     exit(1);
+                // }
             }
             else
             {
                 printlne("Change type not suppored: %d", static_cast<uint8_t>(change.type));
             }
 
-            // printlne("Name: %s | Type: %d | PSize: %ld", change.name.c_str(), (uint8_t)change.type,
-            // change.protoBufData.size());
+            // printlne("Name: %s | Type: %d", change.name.c_str(), (uint8_t)change.type);
             changeSet.changes.emplace_back(change);
         }
 
@@ -360,13 +349,12 @@ private:
         return changeSet;
     }
 
-    FieldVec populateChangedFieldsFromProtobuf(const std::string& changePath, const std::vector<uint8_t> bytes)
+    FieldMap populateChangedFieldsFromProtobuf(const std::string& changePath, const std::vector<uint8_t> bytes)
     {
         const auto itStart = changePath.find_last_of('/') + 1;
         const auto itEnd = changePath.find_last_of('-');
         std::string name = changePath.substr(itStart, itEnd - itStart);
         return protoDecoder.parseProtobufFromBuffer(name, bytes);
-        // return {};
     }
 
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)
@@ -515,6 +503,15 @@ int main(int argc, char** argv)
     /* Read in all the changes */
     hk::ChangesData changesData;
     changesData.loadFromPath(modelPath);
+
+    hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
+
+    printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
+    // printlne("name: %d", (uint8_t)changesData.frames[0].type);
+    for (const auto& [k, v] : fm)
+    {
+        printlne("K: %s", k.c_str());
+    }
 
     /* Create a model to which to apply the changes */
     // hk::Model model;

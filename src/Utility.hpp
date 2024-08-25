@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <map>
+#include <unordered_map>
 #include <vector>
 
 // Surely std::format could be used but if utility is included across multiple translation units
@@ -111,12 +114,14 @@ bool isMagicNumberNext(std::ifstream& stream);
 namespace hk
 {
 struct Field;
-using FieldVec = std::vector<Field>;
-using FieldValue = std::variant<uint64_t, std::string, double, FieldVec>;
+using FieldMap = std::unordered_map<std::string, Field>;
+using StringVec = std::vector<std::string>;
+using IntegerVec = std::vector<uint64_t>;
+using DoubleVec = std::vector<double>;
+using FieldValue = std::variant<uint64_t, double, std::string, StringVec, IntegerVec, DoubleVec, FieldMap>;
 
 struct Field
 {
-    std::string name;
     FieldValue value;
 };
 } // namespace hk
