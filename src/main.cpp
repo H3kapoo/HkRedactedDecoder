@@ -133,6 +133,9 @@ private:
             frames.emplace_back(frame);
         }
 
+        /* Remove temporary meta folder */
+        // fs::remove_all("metaTmp/");
+
         // println("Frame count: %ld", frameCount);
     }
 
@@ -256,7 +259,6 @@ private:
             return;
         }
 
-        protoDecoder.referenceXMLs(beXmlResult, elXmlResult);
         println("Loading meta XML done");
     }
 
@@ -293,7 +295,6 @@ private:
 
     ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path tempPath)
     {
-        // hope that the compiler does RVO
         ChangeSetData changeSet;
 
         changeSet.timeStamp = utils::read8(stream);
@@ -354,7 +355,7 @@ private:
         const auto itStart = changePath.find_last_of('/') + 1;
         const auto itEnd = changePath.find_last_of('-');
         std::string name = changePath.substr(itStart, itEnd - itStart);
-        return protoDecoder.parseProtobufFromBuffer(name, bytes);
+        return protoDecoder.parseProtobufFromBuffer(beXmlResult, elXmlResult, name, bytes);
     }
 
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)
@@ -504,16 +505,16 @@ int main(int argc, char** argv)
     hk::ChangesData changesData;
     changesData.loadFromPath(modelPath);
 
-    hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
+    // hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
 
-    printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
+    // printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
 
-    hk::FieldMap stateInfo = GetMap(fm["stateInfo"].value);
-    std::string adminState = GetStr(stateInfo["operationalState"].value);
+    // hk::FieldMap stateInfo = GetMap(fm["stateInfo"].value);
+    // std::string adminState = GetStr(stateInfo["operationalState"].value);
 
-    printlne("K: %s", adminState.c_str());
+    // printlne("K: %s", adminState.c_str());
 
-    hk::ProtobufDecoder::printFields(fm);
+    // hk::ProtobufDecoder::printFields(fm);
     /* Create a model to which to apply the changes */
     // hk::Model model;
     // model.loadFromPath("metaTmp");
