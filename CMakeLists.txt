@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(protoDeco)
+project(redactedDecoder)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     #Linux-specific code or configuration here
@@ -14,8 +14,8 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
     add_executable(${PROJECT_NAME}
         src/main.cpp
-        # src/mempb.cpp
         deps/HkXML/src/HkXml.cpp
+        src/ProtoDecoder.cpp
         src/Utility.cpp
         )
 

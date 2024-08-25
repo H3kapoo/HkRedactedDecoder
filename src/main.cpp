@@ -9,6 +9,7 @@
 #include <zlib.h>
 
 #include "../deps/HkXML/src/HkXml.hpp"
+#include "CommonTypes.hpp"
 #include "ProtoDecoder.hpp"
 #include "Utility.hpp"
 
@@ -505,20 +506,19 @@ int main(int argc, char** argv)
     hk::ChangesData changesData;
     changesData.loadFromPath(modelPath);
 
-    // hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
+    hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
 
-    // printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
+    printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
 
-    // hk::FieldMap stateInfo = GetMap(fm["stateInfo"].value);
-    // std::string adminState = GetStr(stateInfo["operationalState"].value);
-
-    // printlne("K: %s", adminState.c_str());
-
-    // hk::ProtobufDecoder::printFields(fm);
-    /* Create a model to which to apply the changes */
-    // hk::Model model;
-    // model.loadFromPath("metaTmp");
-    // model.applyChanges(changesData);
+    if (HAS_FIELD(fm, "stateInfo"))
+    {
+        hk::FieldMap stateInfo = GET_MAP(fm["stateInfo"]);
+        if (HAS_FIELD(stateInfo, "operationalState"))
+        {
+            std::string str = GET_STR(stateInfo["operationalState"]);
+            printlne("state is: %s", str.c_str());
+        }
+    }
 
     println("Version %d", changesData.header.version);
     println("Additional info is: %s", changesData.header.additionalInfo.c_str());

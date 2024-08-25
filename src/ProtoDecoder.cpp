@@ -55,48 +55,47 @@ void ProtobufDecoder::printFields(const FieldMap& fm, uint64_t depth)
 
     for (const auto& [fieldName, field] : fm)
     {
-        if (std::holds_alternative<uint64_t>(field.value))
+        if (std::holds_alternative<uint64_t>(field))
         {
-            println("%sFieldName: %s FieldValue: %lu", sp.c_str(), fieldName.c_str(),
-                std::get<std::uint64_t>(field.value));
+            println("%sFieldName: %s FieldValue: %lu", sp.c_str(), fieldName.c_str(), std::get<std::uint64_t>(field));
         }
-        else if (std::holds_alternative<double>(field.value))
+        else if (std::holds_alternative<double>(field))
         {
-            println("%sFieldName: %s: FieldValue: %lf", sp.c_str(), fieldName.c_str(), std::get<double>(field.value));
+            println("%sFieldName: %s: FieldValue: %lf", sp.c_str(), fieldName.c_str(), std::get<double>(field));
         }
-        else if (std::holds_alternative<std::string>(field.value))
+        else if (std::holds_alternative<std::string>(field))
         {
             println("%sFieldName: %s FieldValue: %s", sp.c_str(), fieldName.c_str(),
-                std::get<std::string>(field.value).c_str());
+                std::get<std::string>(field).c_str());
         }
-        else if (std::holds_alternative<StringVec>(field.value))
+        else if (std::holds_alternative<StringVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<StringVec>(field.value))
+            for (const auto& x : std::get<StringVec>(field))
             {
                 println("%s    %s", sp.c_str(), x.c_str());
             }
         }
-        else if (std::holds_alternative<IntegerVec>(field.value))
+        else if (std::holds_alternative<IntegerVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<IntegerVec>(field.value))
+            for (const auto& x : std::get<IntegerVec>(field))
             {
                 println("%s    %ld", sp.c_str(), x);
             }
         }
-        else if (std::holds_alternative<DoubleVec>(field.value))
+        else if (std::holds_alternative<DoubleVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<DoubleVec>(field.value))
+            for (const auto& x : std::get<DoubleVec>(field))
             {
                 println("%s    %lf", sp.c_str(), x);
             }
         }
-        else if (std::holds_alternative<FieldMap>(field.value))
+        else if (std::holds_alternative<FieldMap>(field))
         {
             println("%sFieldName: %s FieldValue{}:", sp.c_str(), fieldName.c_str());
-            printFields(std::get<FieldMap>(field.value), depth + 1);
+            printFields(std::get<FieldMap>(field), depth + 1);
         }
     }
 }
@@ -188,11 +187,12 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
         {
             double d;
             std::memcpy(&d, &std::get<uint64_t>(decodedPayload), sizeof(d));
-            decodeResult.field.value = d;
+            // decodeResult.field.value = d;
+            decodeResult.field.second = d;
         }
         else
         {
-            decodeResult.field.value = decodedPayload;
+            decodeResult.field.second = decodedPayload;
         }
 
         /* Nothing to be done. Proceed to next tag-value pair.*/
@@ -204,7 +204,7 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
          * this is a special LEN decoding path. */
         FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, DecodeHint::STRING_OR_PACKED,
             currentIndex);
-        decodeResult.field.value = decodedPayload;
+        decodeResult.field.second = decodedPayload;
 
         /* Nothing to be done. Proceed to next tag-value pair.*/
         return decodeResult;
@@ -220,7 +220,7 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
         {
             FieldValue decodedPayload = decodePayload(objectNode, tagResult, buffer, DecodeHint::STRING_OR_PACKED,
                 currentIndex);
-            decodeResult.field.value = decodedPayload;
+            decodeResult.field.second = decodedPayload;
 
             /* Nothing to be done. Proceed to next tag-value pair.*/
             return decodeResult;
@@ -241,13 +241,13 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
          * next values. We are nesting.*/
         XMLDecoder::NodeSPtr nodeAbovePNode = objectNode->children[pOrActionNodeIndex - 1];
         FieldValue decodedPayload = decodePayload(nodeAbovePNode, tagResult, buffer, DecodeHint::NONE, currentIndex);
-        decodeResult.field.value = decodedPayload;
+        decodeResult.field.second = decodedPayload;
 
         /* If it was an enum, decode it's value*/
         const XMLDecoder::NodeSPtr& protoNode = pOrActionNode->children[0];
         if (protoNode->getAttribValue("type") == "enum")
         {
-            uint64_t enumVal = std::get<uint64_t>(decodeResult.field.value);
+            uint64_t enumVal = std::get<uint64_t>(decodeResult.field.second);
             // printlne("value %ld node %s", enumVal, nodeAbovePNode->getAttribValue("name")->c_str());
             const XMLDecoder::NodeSPtr& enumNode = nodeAbovePNode->getTagNamedWithAttrib("enum",
                 {"value", std::to_string(enumVal)});
@@ -258,7 +258,7 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
             {
                 return decodeResult;
             }
-            decodeResult.field.value = enumNode->getAttribValue("name").value_or("VALUE_NOT_FOUND");
+            decodeResult.field.second = enumNode->getAttribValue("name").value_or("VALUE_NOT_FOUND");
         }
 
         /* Nothing to be done. Proceed to next tag-value pair.*/
@@ -270,39 +270,39 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
 void ProtobufDecoder::resolveTopLevelDecodeResult(FieldMap& fieldMap, const DecodeResult& decodeResult)
 {
     const auto& [fieldName, repeated, decodedField] = decodeResult;
-    auto& field = fieldMap[fieldName].value;
+    auto& field = fieldMap[fieldName];
 
-    if (std::holds_alternative<std::string>(decodedField.value) && repeated)
+    if (std::holds_alternative<std::string>(decodedField.second) && repeated)
     {
         if (!std::holds_alternative<StringVec>(field))
         {
             field = StringVec{};
         }
-        std::get<StringVec>(field).emplace_back(std::get<std::string>(decodedField.value));
+        std::get<StringVec>(field).emplace_back(std::get<std::string>(decodedField.second));
     }
-    else if (std::holds_alternative<uint64_t>(decodedField.value) && repeated)
+    else if (std::holds_alternative<uint64_t>(decodedField.second) && repeated)
     {
         if (!std::holds_alternative<IntegerVec>(field))
         {
             field = IntegerVec{};
         }
-        std::get<IntegerVec>(field).emplace_back(std::get<uint64_t>(decodedField.value));
+        std::get<IntegerVec>(field).emplace_back(std::get<uint64_t>(decodedField.second));
     }
-    else if (std::holds_alternative<double>(decodedField.value) && repeated)
+    else if (std::holds_alternative<double>(decodedField.second) && repeated)
     {
         if (!std::holds_alternative<DoubleVec>(field))
         {
             field = DoubleVec{};
         }
-        std::get<DoubleVec>(field).emplace_back(std::get<double>(decodedField.value));
+        std::get<DoubleVec>(field).emplace_back(std::get<double>(decodedField.second));
     }
-    else if (std::holds_alternative<FieldMap>(decodedField.value))
+    else if (std::holds_alternative<FieldMap>(decodedField.second))
     {
-        fieldMap[fieldName] = decodedField;
+        fieldMap[fieldName] = decodedField.second;
     }
     else
     {
-        field = decodedField.value;
+        field = decodedField.second;
     }
 }
 

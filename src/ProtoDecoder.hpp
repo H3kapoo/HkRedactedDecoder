@@ -42,7 +42,8 @@ private:
     {
         std::string name;
         bool isRepeated{false};
-        Field field;
+        // Field field;
+        std::pair<std::string, FieldValue> field;
     };
 
     DecodeResult
