@@ -242,16 +242,6 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
                 continue;
             }
             change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
-
-            // if (change.name.contains("CONFIGURE_DEVICE_REQ"))
-            // if (change.name.contains("TX_PU_BP_L"))
-            // {
-            //     change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
-            //     println("name: %s", change.name.c_str());
-            //     // printlnHex(changeProtoBytes);
-            //     protoDecoder.printFields(change.fields);
-            //     exit(1);
-            // }
         }
         else
         {
