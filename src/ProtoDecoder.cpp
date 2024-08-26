@@ -100,19 +100,16 @@ void ProtobufDecoder::printFields(const FieldMap& fm, uint64_t depth)
     }
 }
 
-// protobuf decoding related
+// Protobuf decoding related //
 
 ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr& objectNode,
     const std::vector<uint8_t>& buffer,
     uint64_t& currentIndex)
 {
-    /* Decoded field to be returned. Since it's a variant, it can have int/double/string/[] forms */
+    /* Decoded result to be returned. Since it's a variant, it can have int/double/string/[] forms */
     DecodeResult decodeResult;
 
     TagDecodeResult tagResult = decodeTag(buffer, currentIndex);
-
-    // println("TAG FIELD NR IS: %ld %s %s", tagResult.fieldNumber, objectNode->nodeName.c_str(),
-    //     objectNode->getAttribValue("name").value_or("idk").c_str());
 
     /* We need to find inside the children of "objectNode" a "p" or "action" node who's "proto" node attribute
      * "index" is equal to tagResult.fieldNumber. This will tell us a lot about what kind of node we are dealing
@@ -137,8 +134,6 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
                 pOrActionNode = objectNodeChild;
                 const std::string fieldName = pOrActionNode->getAttribValue("name").value_or("??");
                 decodeResult.name = fieldName;
-                // field.name = std::to_string(tagResult.fieldNumber) + "-" + fieldName;
-                // printlne("Name of p: %s", fieldName.c_str());
                 break;
             }
         }
@@ -209,7 +204,7 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
         /* Nothing to be done. Proceed to next tag-value pair.*/
         return decodeResult;
     }
-    else
+    else // enums/structs
     {
         const bool protoNodePacked =
             isFieldRepeated &&

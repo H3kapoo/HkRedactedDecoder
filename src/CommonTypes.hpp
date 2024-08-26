@@ -9,7 +9,6 @@
 namespace hk
 {
 
-// #define GetMap(x) std::get<hk::FieldMap>(x)
 #define GET_MAP(x) std::get<hk::FieldMap>(x)
 #define GET_STR(x) (std::holds_alternative<std::string>(x) ? std::get<std::string>(x) : std::string())
 #define GET_INT(x) (std::holds_alternative<uint64_t>(x) ? std::get<uint64_t>(x) : -1)

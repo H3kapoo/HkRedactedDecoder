@@ -1,8 +1,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <memory>
-#include <variant>
 #include <vector>
 
 #include <minizip/unzip.h>
@@ -31,7 +29,7 @@ public:
 
     struct SingleChange
     {
-        std::string name{}; // maybe path?
+        std::string name{};
         ChangeType type{ChangeType::UNKNOWN};
         uint32_t protoBufSize{0};
         FieldMap fields{};
@@ -78,7 +76,7 @@ public:
     {
         // header section
         header.version = utils::read4(stream);
-        utils::read4(stream); /* Unused */
+        utils::read4(stream); /* Unused (header-length) */
         uint32_t additionalInfoSize = utils::read4(stream);
         header.additionalInfo = utils::readStringBytes(stream, additionalInfoSize);
 
@@ -88,8 +86,6 @@ public:
 private:
     void readFrames(std::ifstream& stream)
     {
-        uint64_t frameCount = 0;
-
         while (stream.peek() != EOF)
         {
             // each frame starts with a magic number
@@ -105,19 +101,10 @@ private:
             frame.compression = static_cast<CompressionType>(utils::read4(stream));
             frame.frameSize = utils::read4(stream);
 
-            // println("FrameType: %d | Compressed: %d | FrameSize: %d", (uint8_t)frame.type,
-            // (uint8_t)frame.compression,
-            //     frame.frameSize);
             if (frame.type == FrameType::META)
             {
                 readMetaType(stream, frame.frameSize);
                 loadInMetaAsXML("metaTmp");
-
-                // for (const XMLDecoder::NodeSPtr& node : res.first)
-                // {
-                //     node->show();
-                // }
-                // return;
             }
             else if (frame.type == FrameType::CHANGE_SET)
             {
@@ -130,14 +117,11 @@ private:
                 continue; // go back at the top
             }
 
-            frameCount++;
             frames.emplace_back(frame);
         }
 
         /* Remove temporary meta folder */
-        // fs::remove_all("metaTmp/");
-
-        // println("Frame count: %ld", frameCount);
+        fs::remove_all("metaTmp/");
     }
 
     void readMetaType(std::ifstream& stream, const uint64_t size)
@@ -294,14 +278,13 @@ private:
         return ChangeSetData{};
     }
 
-    ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path tempPath)
+    ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path& tempPath)
     {
         ChangeSetData changeSet;
 
         changeSet.timeStamp = utils::read8(stream);
         changeSet.numberOfChanges = utils::read4(stream);
 
-        // printlne("TIMESTAMP: %ld", changeSet.timeStamp);
         for (uint32_t i = 0; i < changeSet.numberOfChanges; i++)
         {
             SingleChange change;
@@ -338,7 +321,6 @@ private:
                 printlne("Change type not suppored: %d", static_cast<uint8_t>(change.type));
             }
 
-            // printlne("Name: %s | Type: %d", change.name.c_str(), (uint8_t)change.type);
             changeSet.changes.emplace_back(change);
         }
 
@@ -423,66 +405,6 @@ public:
     std::vector<Frame> frames;
 };
 
-class Model
-{
-public:
-    struct Field;
-    using FieldVec = std::vector<std::shared_ptr<Field>>;
-    using FieldValue = std::variant<std::string, FieldVec>;
-
-    struct Field
-    {
-        std::string name;
-        FieldValue value;
-    };
-
-    struct Object
-    {
-        std::string name;
-        std::vector<Field> fields;
-    };
-
-    void loadFromPath(const fs::path& path)
-    {
-
-        fs::path beMetaPath = path / "bm/meta.xml";
-        std::ifstream beMeta{beMetaPath};
-
-        if (beMeta.fail())
-        {
-            printlne("Failed to open %s", beMetaPath.c_str());
-            return;
-        }
-
-        XMLDecoder::XmlResult beXml = XMLDecoder().decodeFromStream(beMeta);
-        if (!beXml.second.empty())
-        {
-            printlne("Error while reading %s", beMetaPath.c_str());
-            return;
-        }
-
-        // skip xml tag (0 index)
-        XMLDecoder::NodeVec allObjects = beXml.first[1]->getTagsNamed("managedObject");
-        size_t size = allObjects.size();
-
-        for (const auto& object : allObjects)
-        {
-            std::string className = object->getAttribValue("class").value_or("Not found");
-            XMLDecoder::NodeVec pNodes = object->getTagsNamed("p");
-            println("%s %ld", className.c_str(), pNodes.size());
-        }
-        println("Count %ld", size);
-    }
-
-    void applyChanges(const ChangesData& changesData) {}
-
-    // helper funcs
-    void findObject();
-
-public:
-    std::vector<Object> objects;
-};
-
 } // namespace hk
 
 int main(int argc, char** argv)
@@ -508,8 +430,6 @@ int main(int argc, char** argv)
 
     hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
 
-    printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
-
     if (HAS_FIELD(fm, "stateInfo"))
     {
         hk::FieldMap stateInfo = GET_MAP(fm["stateInfo"]);
@@ -519,6 +439,7 @@ int main(int argc, char** argv)
             printlne("state is: %s", str.c_str());
         }
     }
+    // printlne("name: %s", changesData.frames[1].changeSetData.changes[0].name.c_str());
 
     println("Version %d", changesData.header.version);
     println("Additional info is: %s", changesData.header.additionalInfo.c_str());
