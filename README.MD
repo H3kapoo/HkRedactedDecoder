@@ -6,6 +6,23 @@ Clone: ```git clone --recurse-submodules https://github.com/H3kapoo/HkRedactedDe
 
 Quick usage overview, examples to be added:
 
+```Cpp
+    /* Read in all the changes */
+    hk::ChangesData changesData;
+    changesData.loadFromPath(modelPath);
+
+    hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
+
+    if (HAS_FIELD(fm, "structure"))
+    {
+        hk::FieldMap structure = GET_MAP(fm["structure"]);
+        if (HAS_FIELD(structure, "struct_field"))
+        {
+            std::string str = GET_STR(structure["struct_field"]);
+            printlne("state is: %s", str.c_str());
+        }
+    }
+```
 ```bash
     ./redactedDecoder <path/to/file>
 ```

@@ -430,12 +430,12 @@ int main(int argc, char** argv)
 
     hk::FieldMap fm = changesData.frames[1].changeSetData.changes[0].fields;
 
-    if (HAS_FIELD(fm, "stateInfo"))
+    if (HAS_FIELD(fm, "structure"))
     {
-        hk::FieldMap stateInfo = GET_MAP(fm["stateInfo"]);
-        if (HAS_FIELD(stateInfo, "operationalState"))
+        hk::FieldMap structure = GET_MAP(fm["structure"]);
+        if (HAS_FIELD(structure, "struct_field"))
         {
-            std::string str = GET_STR(stateInfo["operationalState"]);
+            std::string str = GET_STR(structure["struct_field"]);
             printlne("state is: %s", str.c_str());
         }
     }
