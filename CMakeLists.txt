@@ -13,8 +13,10 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../debug)
 
     add_executable(${PROJECT_NAME}
-        src/main.cpp
         deps/HkXML/src/HkXml.cpp
+        
+        src/main.cpp
+        src/RedactedDecoder.cpp
         src/ProtoDecoder.cpp
         src/Utility.cpp
         )
