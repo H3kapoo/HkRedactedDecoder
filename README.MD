@@ -13,9 +13,9 @@ Quick usage overview, examples to be added:
 
 Program requires module (already have it with --recurse-submodules): ```https://github.com/H3kapoo/HkXML```
 Libs required: 
-    - everything HkXML requires
-    - zlib1g-dev (Ubuntu: sudo apt-get install zlib1g-dev)
-    - libminizip-dev (Ubuntu: sudo apt-get install libminizip-dev)
+ - everything HkXML requires
+ - zlib1g-dev (Ubuntu: sudo apt-get install zlib1g-dev)
+ - libminizip-dev (Ubuntu: sudo apt-get install libminizip-dev)
 
 ## Build
 
