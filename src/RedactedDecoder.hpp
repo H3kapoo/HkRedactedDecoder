@@ -78,8 +78,6 @@ private:
     ChangeSetData readChangeSetType(std::ifstream& stream, const CompressionType cType, const uint64_t size);
     ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path& tempPath);
 
-    FieldMap populateChangedFieldsFromProtobuf(const std::string& changePath, const std::vector<uint8_t> bytes);
-
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath);
 
 private:

@@ -1,10 +1,12 @@
 #include "RedactedDecoder.hpp"
 
+#include <cstdint>
 #include <fstream>
 
 #include <minizip/unzip.h>
 #include <zlib.h>
 
+#include "CommonTypes.hpp"
 #include "Utility.hpp"
 
 namespace hk
@@ -57,7 +59,7 @@ void ChangeData::readFrames(std::ifstream& stream)
     }
 
     /* Remove temporary meta folder */
-    fs::remove_all("metaTmp/");
+    // fs::remove_all("metaTmp/");
 }
 
 void ChangeData::readMetaType(std::ifstream& stream, const uint64_t size)
@@ -222,6 +224,10 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
     changeSet.timeStamp = utils::read8(stream);
     changeSet.numberOfChanges = utils::read4(stream);
 
+    std::vector<std::vector<uint8_t>> protobufData;
+    std::vector<std::string> protobufCns;
+
+    // this should be threaded
     for (uint32_t i = 0; i < changeSet.numberOfChanges; i++)
     {
         SingleChange change;
@@ -236,12 +242,17 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
         else if (change.type == ChangeType::CREATE_UPDATE)
         {
             change.protoBufSize = utils::read4(stream);
-            std::vector<uint8_t> changeProtoBytes = utils::readBytes(stream, change.protoBufSize);
             if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
             {
+                utils::readBytes(stream, change.protoBufSize);
                 continue;
             }
-            change.fields = std::move(populateChangedFieldsFromProtobuf(change.name, changeProtoBytes));
+            protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
+
+            const auto itStart = change.name.find_last_of('/') + 1;
+            const auto itEnd = change.name.find_last_of('-');
+            std::string name = change.name.substr(itStart, itEnd - itStart);
+            protobufCns.emplace_back(name);
         }
         else
         {
@@ -251,6 +262,22 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
         changeSet.changes.emplace_back(change);
     }
 
+    std::vector<FieldMap> decodedData = protoDecoder.parseProtobuffs(beXmlResult, elXmlResult, protobufCns,
+        protobufData);
+
+    uint64_t i{0};
+    for (auto& change : changeSet.changes)
+    {
+        if (change.type == ChangeType::DELETED || change.name.contains("GNSS") || change.name.contains("CLOCK"))
+        {
+            continue;
+        }
+
+        // printlne("max: %ld", decodedData.size());
+        change.fields = decodedData[i];
+        i++;
+    }
+
     /* Perform cleanup due to frame being unzipped */
     if (!tempPath.empty())
     {
@@ -258,14 +285,6 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
     }
 
     return changeSet;
-}
-
-FieldMap ChangeData::populateChangedFieldsFromProtobuf(const std::string& changePath, const std::vector<uint8_t> bytes)
-{
-    const auto itStart = changePath.find_last_of('/') + 1;
-    const auto itEnd = changePath.find_last_of('-');
-    std::string name = changePath.substr(itStart, itEnd - itStart);
-    return protoDecoder.parseProtobufFromBuffer(beXmlResult, elXmlResult, name, bytes);
 }
 
 bool ChangeData::decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)

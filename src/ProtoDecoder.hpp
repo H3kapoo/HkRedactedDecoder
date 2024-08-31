@@ -1,6 +1,8 @@
 #include <cstring>
+#include <mutex>
 #include <string>
 
+#include "../deps/HkThreadPool/src/ThreadPool.hpp"
 #include "../deps/HkXML/src/HkXml.hpp"
 #include "CommonTypes.hpp"
 
@@ -13,6 +15,11 @@ public:
         const XMLDecoder::XmlResult& secondXML,
         const std::string& objectClassName,
         const std::vector<uint8_t>& buffer);
+
+    std::vector<FieldMap> parseProtobuffs(const XMLDecoder::XmlResult& firstXML,
+        const XMLDecoder::XmlResult& secondXML,
+        const std::vector<std::string>& objectClassName,
+        const std::vector<std::vector<uint8_t>>& buffer);
 
     static void printFields(const FieldMap& fm, uint64_t depth = 0);
 
@@ -36,13 +43,14 @@ private:
     {
         NONE,
         STRING_OR_PACKED,
+        PACKED_DOUBLE,
+        PACKED_ENUM,
     };
 
     struct DecodeResult
     {
         std::string name;
         bool isRepeated{false};
-        // Field field;
         std::pair<std::string, FieldValue> field;
     };
 
@@ -68,6 +76,13 @@ private:
         uint64_t& currentIndex);
 
 private:
+#define META_VERSION_TOP_XML 1
+#define META_VERSION_TOP_NO_XML 0
+    uint8_t metaVersion{META_VERSION_TOP_XML};
+    ThreadPool tp{4};
+    // ThreadPool tp{1};
+    std::mutex objectsMapLock;
+    std::vector<std::future<FieldMap>> futures;
     std::unordered_map<std::string, XMLDecoder::NodeSPtr> objectsMap;
 };
 } // namespace hk
