@@ -21,7 +21,8 @@ class FieldMap;
 using StringVec = std::vector<std::string>;
 using IntegerVec = std::vector<uint64_t>;
 using DoubleVec = std::vector<double>;
-using FieldValue = std::variant<uint64_t, double, std::string, StringVec, IntegerVec, DoubleVec, FieldMap>;
+using FieldMapVec = std::vector<FieldMap>;
+using FieldValue = std::variant<uint64_t, double, std::string, StringVec, IntegerVec, DoubleVec, FieldMap, FieldMapVec>;
 
 class FieldMap : public std::unordered_map<std::string, FieldValue>
 {};

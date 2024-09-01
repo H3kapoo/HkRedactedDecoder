@@ -18,6 +18,13 @@ FieldMap ProtobufDecoder::parseProtobufFromBuffer(const XMLDecoder::XmlResult& f
     uint64_t bufferSize = buffer.size();
     XMLDecoder::NodeSPtr objectNode{nullptr};
 
+    /* Ignore objects with non-standard meta structures */
+    if (objectClassName.contains("GNSS") || objectClassName.contains("CLOCK") || objectClassName.contains("NTP") ||
+        objectClassName.contains("FRONTHAUL"))
+    {
+        return {};
+    }
+
     /* Check the cache first */
     objectsMapLock.lock();
     metaVersion = secondXML.first[0]->nodeName == "?xml" ? 1 : 0;
@@ -52,6 +59,7 @@ FieldMap ProtobufDecoder::parseProtobufFromBuffer(const XMLDecoder::XmlResult& f
     {
         resolveTopLevelDecodeResult(fieldsMap, decode(objectNode, buffer, currentIndex));
     }
+
     return fieldsMap;
 }
 
@@ -117,31 +125,40 @@ void ProtobufDecoder::printFields(const FieldMap& fm, uint64_t depth)
         else if (std::holds_alternative<StringVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<StringVec>(field))
+            for (uint32_t i{0}; const auto& x : std::get<StringVec>(field))
             {
-                println("%s    %s", sp.c_str(), x.c_str());
+                println("%s    [%d] %s", sp.c_str(), i++, x.c_str());
             }
         }
         else if (std::holds_alternative<IntegerVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<IntegerVec>(field))
+            for (uint32_t i{0}; const auto& x : std::get<IntegerVec>(field))
             {
-                println("%s    %ld", sp.c_str(), x);
+                println("%s    [%d]: %ld", sp.c_str(), i++, x);
             }
         }
         else if (std::holds_alternative<DoubleVec>(field))
         {
             println("%sFieldName: %s FieldValue:", sp.c_str(), fieldName.c_str());
-            for (const auto& x : std::get<DoubleVec>(field))
+            for (uint32_t i{0}; const auto& x : std::get<DoubleVec>(field))
             {
-                println("%s    %lf", sp.c_str(), x);
+                println("%s    [%d]: %lf", sp.c_str(), i++, x);
             }
         }
         else if (std::holds_alternative<FieldMap>(field))
         {
             println("%sFieldName: %s FieldValue{}:", sp.c_str(), fieldName.c_str());
             printFields(std::get<FieldMap>(field), depth + 1);
+        }
+        else if (std::holds_alternative<FieldMapVec>(field))
+        {
+            println("%sFieldName: %s FieldValue[{}]:", sp.c_str(), fieldName.c_str());
+            for (uint32_t i{0}; const auto& x : std::get<FieldMapVec>(field))
+            {
+                println("%s[%d]\\", sp.c_str(), i++);
+                printFields(x, depth + 1);
+            }
         }
     }
 }
@@ -283,7 +300,6 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
         if (pOrActionNodeIndex - 1 < 0)
         {
             printlne("One above index is less than zero!");
-            exit(1);
             return decodeResult;
         }
 
@@ -373,10 +389,24 @@ void ProtobufDecoder::resolveTopLevelDecodeResult(FieldMap& fieldMap, const Deco
     }
     else if (std::holds_alternative<FieldMap>(decodedField.second))
     {
-        fieldMap[fieldName] = decodedField.second;
+        // printlne("holds fm no repeated");
+        if (fieldMap.contains(fieldName))
+        {
+            if (!std::holds_alternative<FieldMapVec>(field))
+            {
+                field = FieldMapVec{};
+            }
+            std::get<FieldMapVec>(field).emplace_back(std::get<FieldMap>(decodedField.second));
+            // printlne("size is %ld", std::get<FieldMapVec>(field).s);
+        }
+        else
+        {
+            fieldMap[fieldName] = decodedField.second;
+        }
     }
     else
     {
+        // printlne("else? repeated: %d", repeated);
         field = decodedField.second;
     }
 }

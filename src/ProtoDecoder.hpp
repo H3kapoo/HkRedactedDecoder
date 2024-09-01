@@ -44,7 +44,7 @@ private:
         NONE,
         STRING_OR_BYTES,
         PACKED_DOUBLE,
-        PACKED_ENUM,
+        PACKED_ENUM
     };
 
     struct DecodeResult
@@ -80,6 +80,7 @@ private:
 #define META_VERSION_TOP_NO_XML 0
     uint8_t metaVersion{META_VERSION_TOP_XML};
 
+    // ThreadPool tp{1};
     ThreadPool tp{8};
     std::mutex objectsMapLock;
     std::vector<std::future<FieldMap>> futures;

@@ -27,6 +27,33 @@ int main(int argc, char** argv)
     hk::ChangeData changesData;
     changesData.loadFromPath(modelPath);
 
+    for (uint64_t frameId{0}; const auto& frame : changesData.frames)
+    {
+        for (const auto& changeSet : frame.changeSetData)
+        {
+            std::time_t unix_timestamp = changeSet.timeStamp;
+            std::chrono::milliseconds ms(unix_timestamp);
+            std::chrono::system_clock::time_point tp(ms);
+            std::time_t time = std::chrono::system_clock::to_time_t(tp);
+            auto milliseconds_part = ms.count() % 1000;
+            std::tm* utc_tm = std::gmtime(&time);
+            char buffer[100];
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
+
+            frameId++;
+
+            for (const auto& change : changeSet.changes)
+            {
+                // channels list isnt properly showing
+                if (change.name.contains("CALCULATION_REQ-3"))
+                {
+                    println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, changeSet.changes.size());
+                    printlne("type: %d name: %s", (uint8_t)change.type, change.name.c_str());
+                    hk::ProtobufDecoder::printFields(change.fields);
+                }
+            }
+        }
+    }
     // hk::FieldMap fm = changesData.frames[3].changeSetData.changes[0].fields;
 
     // printlne("name: %s", changesData.frames[4].changeSetData.changes[0].name.c_str());

@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/redactedDecoder",
-            "args": ["data/BTS1576215_1011_im_snapshot.ims2"],
+            "args": ["data/BTS5020_1011_im_snapshot.ims2"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

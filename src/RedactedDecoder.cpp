@@ -255,19 +255,12 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
             else if (change.type == ChangeType::CREATE_UPDATE)
             {
                 change.protoBufSize = utils::read4(stream);
-                if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
-                {
-                    utils::readBytes(stream, change.protoBufSize);
-                }
-                else
-                {
-                    protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
+                protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
 
-                    const auto itStart = change.name.find_last_of('/') + 1;
-                    const auto itEnd = change.name.find_last_of('-');
-                    std::string name = change.name.substr(itStart, itEnd - itStart);
-                    protobufCns.emplace_back(name);
-                }
+                const auto itStart = change.name.find_last_of('/') + 1;
+                const auto itEnd = change.name.find_last_of('-');
+                std::string name = change.name.substr(itStart, itEnd - itStart);
+                protobufCns.emplace_back(name);
             }
             else
             {
@@ -283,7 +276,7 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
         uint64_t i{0};
         for (auto& change : changeSet.changes)
         {
-            if (change.type == ChangeType::DELETED || change.name.contains("GNSS") || change.name.contains("CLOCK"))
+            if (change.type == ChangeType::DELETED)
             {
                 continue;
             }
