@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 
@@ -28,24 +29,31 @@ int main(int argc, char** argv)
 
     // for (uint64_t frameId{0}; const auto& frame : changesData.frames)
     // {
-    //     std::time_t unix_timestamp = frame.changeSetData.timeStamp;
-    //     std::chrono::milliseconds ms(unix_timestamp);
-    //     std::chrono::system_clock::time_point tp(ms);
-    //     std::time_t time = std::chrono::system_clock::to_time_t(tp);
-    //     auto milliseconds_part = ms.count() % 1000;
-    //     std::tm* utc_tm = std::gmtime(&time);
-    //     char buffer[100];
-    //     std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
-
-    //     println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, frame.changeSetData.changes.size());
-    //     frameId++;
-
-    //     for (const auto& change : frame.changeSetData.changes)
+    //     for (const auto& changeSet : frame.changeSetData)
     //     {
-    //         if (change.name.contains("ACTIVATE_CARRIERS_REQ"))
+    //         std::time_t unix_timestamp = changeSet.timeStamp;
+    //         std::chrono::milliseconds ms(unix_timestamp);
+    //         std::chrono::system_clock::time_point tp(ms);
+    //         std::time_t time = std::chrono::system_clock::to_time_t(tp);
+    //         auto milliseconds_part = ms.count() % 1000;
+    //         std::tm* utc_tm = std::gmtime(&time);
+    //         char buffer[100];
+    //         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
+
+    //         // println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, changeSet.changes.size());
+    //         frameId++;
+
+    //         for (const auto& change : changeSet.changes)
     //         {
-    //             //     printlne("found");
-    //             printlne("name: %s", change.name.c_str());
+    //             if (change.name.ends_with("ACTIVATE_CARRIERS_REQ-11"))
+    //             {
+    //                 //     printlne("found");
+    //                 println("type: %d", (uint8_t)change.type);
+    //                 println("Frame %ld | Timestamp %s:%ld | Changes %ld", frameId, buffer, milliseconds_part,
+    //                     changeSet.changes.size());
+
+    //                 printlne("name: %s", change.name.c_str());
+    //             }
     //         }
     //     }
     // }
@@ -66,9 +74,16 @@ int main(int argc, char** argv)
     //     }
     // }
 
+    uint32_t changesInAllFrames{0};
+
+    for (const auto& frame : changesData.frames)
+    {
+        changesInAllFrames += frame.changeSetData.size();
+    }
     println("Version %d", changesData.header.version);
     println("Additional info is: %s", changesData.header.additionalInfo.c_str());
     println("Frames: %ld", changesData.frames.size());
+    println("ChangeSets: %d", changesInAllFrames);
 
     return 0;
 }

@@ -194,7 +194,13 @@ ChangeData::readChangeSetType(std::ifstream& stream, const CompressionType cType
         if (decompressGZipChangeSetFrame(stream, size, tempPath))
         {
             std::ifstream decompressedData{tempPath};
-            return internalReadChangeSetType(decompressedData, size, tempPath);
+
+            /* Get file size so we know how much to decode*/
+            decompressedData.seekg(0, std::ios::end);
+            uint64_t fileSize = decompressedData.tellg();
+            decompressedData.seekg(std::ios::beg);
+
+            return internalReadChangeSetType(decompressedData, fileSize, tempPath);
         }
         else
         {
@@ -224,28 +230,16 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
     uint64_t currentCursorPos = stream.tellg();
     const uint64_t maxToRead{currentCursorPos + size};
 
+    std::vector<std::vector<uint8_t>> protobufData;
+    std::vector<std::string> protobufCns;
+
     /* Exhaust the stream into a vector of changeSet */
     while (currentCursorPos < maxToRead)
     {
-        // uint64_t g = stream.tellg();
-        // printlne("size: %ld tell: %ld sizeSet: %ld", streamSize, g, changeSetVec.size());
         ChangeSetData changeSet;
 
         changeSet.timeStamp = utils::read8(stream);
         changeSet.numberOfChanges = utils::read4(stream);
-
-        // std::time_t unix_timestamp = changeSet.timeStamp;
-        // std::chrono::milliseconds ms(unix_timestamp);
-        // std::chrono::system_clock::time_point tp(ms);
-        // std::time_t time = std::chrono::system_clock::to_time_t(tp);
-        // auto milliseconds_part = ms.count() % 1000;
-        // std::tm* utc_tm = std::gmtime(&time);
-        // char buffer[100];
-        // std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
-
-        // println("TS: %s:%ld | CH: %d", buffer, milliseconds_part, changeSet.numberOfChanges);
-        std::vector<std::vector<uint8_t>> protobufData;
-        std::vector<std::string> protobufCns;
 
         for (uint32_t i = 0; i < changeSet.numberOfChanges; i++)
         {
@@ -253,7 +247,6 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
             uint32_t nameSize = utils::read2(stream);
             change.name = utils::readStringBytes(stream, nameSize);
             change.type = static_cast<ChangeType>(utils::read1(stream));
-            // println("type: %d, chane name: %s", static_cast<uint8_t>(change.type), change.name.c_str());
 
             if (change.type == ChangeType::DELETED)
             {
@@ -265,14 +258,16 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
                 if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
                 {
                     utils::readBytes(stream, change.protoBufSize);
-                    continue;
                 }
-                protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
+                else
+                {
+                    protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
 
-                const auto itStart = change.name.find_last_of('/') + 1;
-                const auto itEnd = change.name.find_last_of('-');
-                std::string name = change.name.substr(itStart, itEnd - itStart);
-                protobufCns.emplace_back(name);
+                    const auto itStart = change.name.find_last_of('/') + 1;
+                    const auto itEnd = change.name.find_last_of('-');
+                    std::string name = change.name.substr(itStart, itEnd - itStart);
+                    protobufCns.emplace_back(name);
+                }
             }
             else
             {
@@ -293,7 +288,6 @@ ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size
                 continue;
             }
 
-            // printlne("max: %ld", decodedData.size());
             change.fields = decodedData[i];
             i++;
         }
