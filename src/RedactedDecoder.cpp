@@ -4,9 +4,9 @@
 #include <fstream>
 
 #include <minizip/unzip.h>
+#include <string>
 #include <zlib.h>
 
-#include "CommonTypes.hpp"
 #include "Utility.hpp"
 
 namespace hk
@@ -185,7 +185,7 @@ void ChangeData::loadInMetaAsXML(const fs::path metaPath)
     println("Loading meta XML done");
 }
 
-ChangeData::ChangeSetData
+ChangeData::ChangeSetDataVec
 ChangeData::readChangeSetType(std::ifstream& stream, const CompressionType cType, const uint64_t size)
 {
     if (cType == CompressionType::GZIP)
@@ -194,88 +194,116 @@ ChangeData::readChangeSetType(std::ifstream& stream, const CompressionType cType
         if (decompressGZipChangeSetFrame(stream, size, tempPath))
         {
             std::ifstream decompressedData{tempPath};
-            return internalReadChangeSetType(decompressedData, tempPath);
+            return internalReadChangeSetType(decompressedData, size, tempPath);
         }
         else
         {
             printlne("Failed to decompress frame. Skipping over it.");
             stream.seekg(size, std::ios::cur);
-            return ChangeSetData{};
+            return ChangeSetDataVec{};
         }
     }
     if (cType == CompressionType::NO_COMPRESSION)
     {
-        return internalReadChangeSetType(stream, "");
+        return internalReadChangeSetType(stream, size, "");
     }
     else
     {
         printlne("Compression type %d not supported. Skipping over it.", (uint8_t)cType);
         stream.seekg(size, std::ios::cur);
-        return ChangeSetData{};
+        return ChangeSetDataVec{};
     }
 
-    return ChangeSetData{};
+    return ChangeSetDataVec{};
 }
 
-ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& stream, const fs::path& tempPath)
+ChangeData::ChangeSetDataVec
+ChangeData::internalReadChangeSetType(std::ifstream& stream, const uint64_t size, const fs::path& tempPath)
 {
-    ChangeSetData changeSet;
+    ChangeSetDataVec changeSetVec;
+    uint64_t currentCursorPos = stream.tellg();
+    const uint64_t maxToRead{currentCursorPos + size};
 
-    changeSet.timeStamp = utils::read8(stream);
-    changeSet.numberOfChanges = utils::read4(stream);
-
-    std::vector<std::vector<uint8_t>> protobufData;
-    std::vector<std::string> protobufCns;
-
-    // this should be threaded
-    for (uint32_t i = 0; i < changeSet.numberOfChanges; i++)
+    /* Exhaust the stream into a vector of changeSet */
+    while (currentCursorPos < maxToRead)
     {
-        SingleChange change;
-        uint32_t nameSize = utils::read2(stream);
-        change.name = utils::readStringBytes(stream, nameSize);
-        change.type = static_cast<ChangeType>(utils::read1(stream));
+        // uint64_t g = stream.tellg();
+        // printlne("size: %ld tell: %ld sizeSet: %ld", streamSize, g, changeSetVec.size());
+        ChangeSetData changeSet;
 
-        if (change.type == ChangeType::DELETED)
+        changeSet.timeStamp = utils::read8(stream);
+        changeSet.numberOfChanges = utils::read4(stream);
+
+        // std::time_t unix_timestamp = changeSet.timeStamp;
+        // std::chrono::milliseconds ms(unix_timestamp);
+        // std::chrono::system_clock::time_point tp(ms);
+        // std::time_t time = std::chrono::system_clock::to_time_t(tp);
+        // auto milliseconds_part = ms.count() % 1000;
+        // std::tm* utc_tm = std::gmtime(&time);
+        // char buffer[100];
+        // std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
+
+        // println("TS: %s:%ld | CH: %d", buffer, milliseconds_part, changeSet.numberOfChanges);
+        std::vector<std::vector<uint8_t>> protobufData;
+        std::vector<std::string> protobufCns;
+
+        for (uint32_t i = 0; i < changeSet.numberOfChanges; i++)
         {
-            // nothing more to do. NO payload
-        }
-        else if (change.type == ChangeType::CREATE_UPDATE)
-        {
-            change.protoBufSize = utils::read4(stream);
-            if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
+            SingleChange change;
+            uint32_t nameSize = utils::read2(stream);
+            change.name = utils::readStringBytes(stream, nameSize);
+            change.type = static_cast<ChangeType>(utils::read1(stream));
+            // println("type: %d, chane name: %s", static_cast<uint8_t>(change.type), change.name.c_str());
+
+            if (change.type == ChangeType::DELETED)
             {
-                utils::readBytes(stream, change.protoBufSize);
+                // nothing more to do. NO payload
+            }
+            else if (change.type == ChangeType::CREATE_UPDATE)
+            {
+                change.protoBufSize = utils::read4(stream);
+                if (change.name.contains("GNSS") || change.name.contains("CLOCK"))
+                {
+                    utils::readBytes(stream, change.protoBufSize);
+                    continue;
+                }
+                protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
+
+                const auto itStart = change.name.find_last_of('/') + 1;
+                const auto itEnd = change.name.find_last_of('-');
+                std::string name = change.name.substr(itStart, itEnd - itStart);
+                protobufCns.emplace_back(name);
+            }
+            else
+            {
+                printlne("Change type not suppored: %d", static_cast<uint8_t>(change.type));
+            }
+
+            changeSet.changes.emplace_back(change);
+        }
+
+        std::vector<FieldMap> decodedData = protoDecoder.parseProtobuffs(beXmlResult, elXmlResult, protobufCns,
+            protobufData);
+
+        uint64_t i{0};
+        for (auto& change : changeSet.changes)
+        {
+            if (change.type == ChangeType::DELETED || change.name.contains("GNSS") || change.name.contains("CLOCK"))
+            {
                 continue;
             }
-            protobufData.emplace_back(utils::readBytes(stream, change.protoBufSize));
 
-            const auto itStart = change.name.find_last_of('/') + 1;
-            const auto itEnd = change.name.find_last_of('-');
-            std::string name = change.name.substr(itStart, itEnd - itStart);
-            protobufCns.emplace_back(name);
-        }
-        else
-        {
-            printlne("Change type not suppored: %d", static_cast<uint8_t>(change.type));
+            // printlne("max: %ld", decodedData.size());
+            change.fields = decodedData[i];
+            i++;
         }
 
-        changeSet.changes.emplace_back(change);
-    }
+        changeSetVec.emplace_back(changeSet);
+        protobufCns.clear();
+        protobufData.clear();
 
-    std::vector<FieldMap> decodedData = protoDecoder.parseProtobuffs(beXmlResult, elXmlResult, protobufCns,
-        protobufData);
-
-    uint64_t i{0};
-    for (auto& change : changeSet.changes)
-    {
-        if (change.type == ChangeType::DELETED || change.name.contains("GNSS") || change.name.contains("CLOCK"))
-        {
-            continue;
-        }
-
-        // printlne("max: %ld", decodedData.size());
-        change.fields = decodedData[i];
-        i++;
+        /* Get updated cursor pos so we know if we should stop or not */
+        currentCursorPos = stream.tellg();
     }
 
     /* Perform cleanup due to frame being unzipped */
@@ -283,8 +311,7 @@ ChangeData::ChangeSetData ChangeData::internalReadChangeSetType(std::ifstream& s
     {
         fs::remove_all(tempPath.parent_path());
     }
-
-    return changeSet;
+    return changeSetVec;
 }
 
 bool ChangeData::decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath)
@@ -314,6 +341,7 @@ bool ChangeData::decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t si
     }
 
     std::ofstream outFile{outputPath};
+
     char outBuffer[4096];
     int32_t retStatus;
 

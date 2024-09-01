@@ -42,7 +42,7 @@ private:
     enum class DecodeHint
     {
         NONE,
-        STRING_OR_PACKED,
+        STRING_OR_BYTES,
         PACKED_DOUBLE,
         PACKED_ENUM,
     };
@@ -79,8 +79,8 @@ private:
 #define META_VERSION_TOP_XML 1
 #define META_VERSION_TOP_NO_XML 0
     uint8_t metaVersion{META_VERSION_TOP_XML};
-    ThreadPool tp{4};
-    // ThreadPool tp{1};
+
+    ThreadPool tp{8};
     std::mutex objectsMapLock;
     std::vector<std::future<FieldMap>> futures;
     std::unordered_map<std::string, XMLDecoder::NodeSPtr> objectsMap;

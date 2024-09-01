@@ -29,7 +29,6 @@ FieldMap ProtobufDecoder::parseProtobufFromBuffer(const XMLDecoder::XmlResult& f
     /* Else do the hard work of finding it */
     else
     {
-        // printlne("Children %ld", firstXML.first[1]->children.size());
         objectsMapLock.unlock();
         const XMLDecoder::AttrPair searchAttr{"class", objectClassName};
         objectNode = firstXML.first[metaVersion]->getTagNamedWithAttrib("managedObject", searchAttr);
@@ -48,13 +47,11 @@ FieldMap ProtobufDecoder::parseProtobufFromBuffer(const XMLDecoder::XmlResult& f
         objectsMapLock.unlock();
     }
 
-    // printlne("Object name %s %ld", objectClassName.c_str(), bufferSize);
     FieldMap fieldsMap;
     while (currentIndex < bufferSize)
     {
         resolveTopLevelDecodeResult(fieldsMap, decode(objectNode, buffer, currentIndex));
     }
-    // printFields(fieldsMap);
     return fieldsMap;
 }
 
@@ -73,7 +70,6 @@ std::vector<FieldMap> ProtobufDecoder::parseProtobuffs(const XMLDecoder::XmlResu
 
     for (uint64_t index = 0; const auto& objCn : objectClassNames)
     {
-        // printlne("changes: %ld", buffers.size());
         // clang-format off
         futures.emplace_back(
             tp.enqueue(
@@ -163,23 +159,22 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
 
     /* We need to find inside the children of "objectNode" a "p" or "action" node who's "proto" node attribute
      * "index" is equal to tagResult.fieldNumber. This will tell us a lot about what kind of node we are dealing
-     * with. Also cache the proto node. */
-    XMLDecoder::NodeSPtr pOrActionNode{nullptr};
-
+     * with. Alternatively we need to find the "p" or "action" node who's "id" is equal to tagResult.fieldNumber. */
     /* Keep track at which position relative to other "objectNode" children we found this "p" or "action" node. */
+    XMLDecoder::NodeSPtr pOrActionNode{nullptr};
     int64_t pOrActionNodeIndex{0};
+
     for (const auto& objectNodeChild : objectNode->children)
     {
         if (objectNodeChild->nodeName == "p" || objectNodeChild->nodeName == "action")
         {
             const uint64_t childrenCount = objectNodeChild->children.size();
 
-            /* "proto" will always be the last node.. except for the meta version in which proto in BM is not
-             * present..*/
+            /* "proto" will always be the last node.. except for the meta version in which "proto" in BM is not
+               present and we need to check the "id" attribute instead. */
             std::string indexValue;
             if (childrenCount == 0 || objectNodeChild->children[childrenCount - 1]->nodeName != "proto")
             {
-                // new BM type..
                 indexValue = objectNodeChild->getAttribValue("id").value_or("0");
             }
             else
@@ -188,41 +183,43 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
                 indexValue = protoNode->getAttribValue("index").value_or("0");
             }
 
-            /* If "proto" index matches the fieldNumber, then the decoded field name is the "name" attribute of the
-             * "p" / "action" node. */
+            /* The decoded field name is the "name" attribute of the "p" / "action" node. */
             if (indexValue == std::to_string(tagResult.fieldNumber))
             {
                 pOrActionNode = objectNodeChild;
                 const std::string fieldName = pOrActionNode->getAttribValue("name").value_or("??");
                 decodeResult.name = fieldName;
                 // printlne("%s %s name: %s", objectNode->getAttribValue("class")->c_str(),
-                // std::to_string(tagResult.fieldNumber).c_str(), fieldName.c_str());
+                //     std::to_string(tagResult.fieldNumber).c_str(), fieldName.c_str());
                 break;
             }
         }
         pOrActionNodeIndex++;
     }
 
-    /* If we get here, means we did something wrong. There always needs to be a p/action node for a tag field
-     * number. In this case some error should be shown.*/
+    /* If we get inside here, means we did something wrong. There always needs to be a p/action node for a tag field
+       number. In this case some error should be shown.*/
     if (!pOrActionNode)
     {
-        // it will enter here for CLOCK, don't care for now
         printlne("pOrActionNode not found for fieldNumber %ld", tagResult.fieldNumber);
-        exit(1);
-        return decodeResult;
+        return {};
     }
 
-    /* If p/action nodes can have "recurrence" and "type" attributes. "proto" nodes can have "packed" attribute.
-       Based on those, we need to decide how to decode further.*/
+    /* If p/action nodes can have "recurrence" and "type" attributes. Based on those, we need to decide how to decode
+       further.*/
     const std::string pNodeType = pOrActionNode->getAttribValue("type").value_or("UNKNOWN");
     const std::string pNodeRecurrence = pOrActionNode->getAttribValue("recurrence").value_or("UNKNOWN");
     const bool isIntegerType = pNodeType == "integer";
     const bool isDoubleType = pNodeType == "double";
-    const bool isSimpleType = isIntegerType || isDoubleType || pNodeType == "boolean";
     const bool isStringType = pNodeType == "string";
+    const bool isSimpleType = isIntegerType || isDoubleType || pNodeType == "boolean";
     const bool isFieldRepeated = pNodeRecurrence == "repeated";
 
+    const bool isPackedData =
+        (metaVersion == META_VERSION_TOP_NO_XML && isFieldRepeated) ||
+        (isFieldRepeated &&
+            pOrActionNode->children[pOrActionNode->children.size() - 1]->getAttribValue("packed").value_or("?") ==
+                "true");
     if (isFieldRepeated)
     {
         decodeResult.isRepeated = true;
@@ -230,17 +227,9 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
 
     if (isSimpleType)
     {
-        /* If the simple types are packed, we need to treat them as string_packed hint. */
-        const bool protoNodePacked =
-            (metaVersion == META_VERSION_TOP_NO_XML && isFieldRepeated) ||
-            (isFieldRepeated &&
-                pOrActionNode->children[pOrActionNode->children.size() - 1]->getAttribValue("packed").value_or("?") ==
-                    "true");
-
-        /* As this isn't a structure of any kind, we can pass "nullptr" as first argument. No need to recurse
-         * deeper, decode will always get us an integer/double/bool. No hints are necessary here. */
-        const bool isPackedDouble = isDoubleType && protoNodePacked;
-        const bool isPackedInteger = isIntegerType && protoNodePacked;
+        /* Hint at how the decoder should decode the paylod */
+        const bool isPackedDouble = isDoubleType && (isPackedData || tagResult.type == WireType::LEN);
+        const bool isPackedInteger = isIntegerType && isPackedData;
         DecodeHint hint{DecodeHint::NONE};
         if (isPackedDouble)
         {
@@ -252,8 +241,11 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
         }
         else if (isStringType)
         {
-            hint = DecodeHint::STRING_OR_PACKED;
+            hint = DecodeHint::STRING_OR_BYTES;
         }
+
+        /* As this isn't a structure of any kind, we can pass "nullptr" as first argument. No need to recurse
+           deeper. Decode will always get us an integer/double/bool. No hints are necessary here. */
         FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, hint, currentIndex);
 
         /* In the future we can adapt "decodePayload" to automatically give back a double based on hint, but for
@@ -275,8 +267,8 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
     else if (isStringType)
     {
         /* We can still pass "nullptr" as we don't need to recurse down on anything, but the hint is now set as
-         * this is a special LEN decoding path. */
-        FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, DecodeHint::STRING_OR_PACKED,
+           this is a special LEN decoding path. */
+        FieldValue decodedPayload = decodePayload(nullptr, tagResult, buffer, DecodeHint::STRING_OR_BYTES,
             currentIndex);
         decodeResult.field.second = decodedPayload;
 
@@ -285,16 +277,9 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
     }
     else // enums/structs
     {
-        const bool protoNodePacked =
-            (metaVersion == META_VERSION_TOP_NO_XML && isFieldRepeated) ||
-            (isFieldRepeated &&
-                pOrActionNode->children[pOrActionNode->children.size() - 1]->getAttribValue("packed").value_or("?") ==
-                    "true");
-
-        /* It's either a Structure or an Enum type which are encoded as LEN wire type */
         /* We need to recurse down on the object one above "p"/"action" node. However if that node doesn't
-         * exist, we kinda have a problem. We shall not get to this point. Some objects don't follow the META
-         * correctly and we will end up here. Skip for those (GNSS). */
+           exist, we kinda have a problem. We shall not get to this point. Some objects don't follow the META
+           correctly and we will end up here. Skip for those (GNSS). No need to recurse for enums though. */
         if (pOrActionNodeIndex - 1 < 0)
         {
             printlne("One above index is less than zero!");
@@ -302,11 +287,10 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
             return decodeResult;
         }
 
-        /* If it was an enum, decode it's value*/
         if (pOrActionNodeIndex - 1 >= 0 && objectNode->children[pOrActionNodeIndex - 1]->nodeName == "enumeration")
         {
             FieldValue decodedPayload = decodePayload(objectNode, tagResult, buffer,
-                protoNodePacked ? DecodeHint::PACKED_ENUM : DecodeHint::NONE, currentIndex);
+                isPackedData ? DecodeHint::PACKED_ENUM : DecodeHint::NONE, currentIndex);
             decodeResult.field.second = decodedPayload;
 
             XMLDecoder::NodeSPtr nodeAbovePNode = objectNode->children[pOrActionNodeIndex - 1];
@@ -319,9 +303,7 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
                         {"value", std::to_string(i)});
                     if (!enumNode)
                     {
-                        printlnHex(buffer);
                         printlne("Didn't find any enum matching description %ld", i);
-                        exit(1);
                         return decodeResult;
                     }
 
@@ -336,23 +318,20 @@ ProtobufDecoder::DecodeResult ProtobufDecoder::decode(const XMLDecoder::NodeSPtr
                 const XMLDecoder::NodeSPtr& enumNode = nodeAbovePNode->getTagNamedWithAttrib("enum",
                     {"value", std::to_string(enumVal)});
 
-                /* If this is the case, means one above isn't directly an enumeration. We shall find the
-                   referenced enum, but it's slow and not many meta objects do this, so idk */
                 if (!enumNode)
                 {
-                    printlnHex(buffer);
                     printlne("Didn't find any enum matching description %ld", enumVal);
-                    exit(1);
                     return decodeResult;
                 }
                 decodeResult.field.second = enumNode->getAttribValue("name").value_or("VALUE_NOT_FOUND");
             }
 
+            /* Nothing to be done. Proceed to next tag-value pair.*/
             return decodeResult;
         } // enum
 
-        /* This object is gonna play as the struct/enum above the "p"/"action" node from where we will get our
-         * next values. We are nesting.*/
+        /* This object is gonna play as the struct above the "p"/"action" node from where we will get our
+           next values. We are nesting.*/
         XMLDecoder::NodeSPtr nodeAbovePNode = objectNode->children[pOrActionNodeIndex - 1];
         FieldValue decodedPayload = decodePayload(nodeAbovePNode, tagResult, buffer, DecodeHint::NONE, currentIndex);
         decodeResult.field.second = decodedPayload;
@@ -532,7 +511,7 @@ FieldValue ProtobufDecoder::decodePayload(const XMLDecoder::NodeSPtr& objectNode
         case WireType::LEN: {
             /* Decoded length of the LEN payload in bytes*/
             uint64_t payloadLen = decodeVarInt(buffer, currentIndex);
-            if (hint == DecodeHint::STRING_OR_PACKED)
+            if (hint == DecodeHint::STRING_OR_BYTES)
             {
                 return decodePackedPayload(payloadLen, buffer, currentIndex);
             }

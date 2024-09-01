@@ -14,7 +14,6 @@ namespace fs = std::filesystem;
 
 class ChangeData
 {
-
 public:
     enum class ChangeType : uint8_t
     {
@@ -38,6 +37,8 @@ public:
         std::vector<SingleChange> changes;
     };
 
+    using ChangeSetDataVec = std::vector<ChangeSetData>;
+
     enum class FrameType : uint8_t
     {
         CHANGE_SET = 0,
@@ -59,7 +60,7 @@ public:
         FrameType type{FrameType::UNKNOWN};
         CompressionType compression{CompressionType::UNKNOWN};
         uint32_t frameSize{0};
-        ChangeSetData changeSetData;
+        ChangeSetDataVec changeSetData;
     };
 
     struct Header
@@ -75,8 +76,8 @@ private:
     void readMetaType(std::ifstream& stream, const uint64_t size);
     void loadInMetaAsXML(const fs::path metaPath);
 
-    ChangeSetData readChangeSetType(std::ifstream& stream, const CompressionType cType, const uint64_t size);
-    ChangeSetData internalReadChangeSetType(std::ifstream& stream, const fs::path& tempPath);
+    ChangeSetDataVec readChangeSetType(std::ifstream& stream, const CompressionType cType, const uint64_t size);
+    ChangeSetDataVec internalReadChangeSetType(std::ifstream& stream, const uint64_t size, const fs::path& tempPath);
 
     bool decompressGZipChangeSetFrame(std::ifstream& stream, uint64_t size, fs::path outputPath);
 
