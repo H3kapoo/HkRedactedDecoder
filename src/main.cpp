@@ -27,36 +27,6 @@ int main(int argc, char** argv)
     hk::ChangeData changesData;
     changesData.loadFromPath(modelPath);
 
-    // for (uint64_t frameId{0}; const auto& frame : changesData.frames)
-    // {
-    //     for (const auto& changeSet : frame.changeSetData)
-    //     {
-    //         std::time_t unix_timestamp = changeSet.timeStamp;
-    //         std::chrono::milliseconds ms(unix_timestamp);
-    //         std::chrono::system_clock::time_point tp(ms);
-    //         std::time_t time = std::chrono::system_clock::to_time_t(tp);
-    //         auto milliseconds_part = ms.count() % 1000;
-    //         std::tm* utc_tm = std::gmtime(&time);
-    //         char buffer[100];
-    //         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_tm);
-
-    //         // println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, changeSet.changes.size());
-    //         frameId++;
-
-    //         for (const auto& change : changeSet.changes)
-    //         {
-    //             if (change.name.ends_with("ACTIVATE_CARRIERS_REQ-11"))
-    //             {
-    //                 //     printlne("found");
-    //                 println("type: %d", (uint8_t)change.type);
-    //                 println("Frame %ld | Timestamp %s:%ld | Changes %ld", frameId, buffer, milliseconds_part,
-    //                     changeSet.changes.size());
-
-    //                 printlne("name: %s", change.name.c_str());
-    //             }
-    //         }
-    //     }
-    // }
     // hk::FieldMap fm = changesData.frames[3].changeSetData.changes[0].fields;
 
     // printlne("name: %s", changesData.frames[4].changeSetData.changes[0].name.c_str());
