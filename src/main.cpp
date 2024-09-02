@@ -45,31 +45,12 @@ int main(int argc, char** argv)
             for (const auto& change : changeSet.changes)
             {
                 // channels list isnt properly showing
-                if (change.name.contains("CALCULATION_REQ-3"))
-                {
-                    println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, changeSet.changes.size());
-                    printlne("type: %d name: %s", (uint8_t)change.type, change.name.c_str());
-                    hk::ProtobufDecoder::printFields(change.fields);
-                }
+                println("Frame %ld | Timestamp %s | Changes %ld", frameId, buffer, changeSet.changes.size());
+                printlne("type: %d name: %s", (uint8_t)change.type, change.name.c_str());
+                hk::ProtobufDecoder::printFields(change.fields);
             }
         }
     }
-    // hk::FieldMap fm = changesData.frames[3].changeSetData.changes[0].fields;
-
-    // printlne("name: %s", changesData.frames[4].changeSetData.changes[0].name.c_str());
-    // for (const auto& ch : changesData.frames[4].changeSetData.changes)
-    // {
-    //     hk::ProtobufDecoder::printFields(ch.fields);
-    // }
-    // if (HAS_FIELD(fm, "structure"))
-    // {
-    //     hk::FieldMap structure = GET_MAP(fm["structure"]);
-    //     if (HAS_FIELD(structure, "struct_field"))
-    //     {
-    //         std::string str = GET_STR(structure["struct_field"]);
-    //         printlne("state is: %s", str.c_str());
-    //     }
-    // }
 
     uint32_t changesInAllFrames{0};
 
